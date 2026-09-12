@@ -6,6 +6,12 @@ output with an **Edit** button that brings the text box back.
 
 Everything lives in the browser's `localStorage` — no accounts, no server, no network calls.
 
+## Links
+
+- Repository: https://github.com/ClemL/md-notebook
+- Vercel project: https://vercel.com/clem21/md-notebook
+- Live app: https://md-notebook.vercel.app/
+
 ## Features
 
 - **Blur to render.** Leaving a text box renders it; `Esc` or `Ctrl+Enter` commits without clicking away.
@@ -41,8 +47,15 @@ npm run typecheck
 The app is a static-prerendered Next.js App Router project with no environment variables and no
 server-side state, so it deploys with zero configuration.
 
-1. Push this branch to GitHub.
-2. In Vercel: **Add New → Project → Import** this repository.
+The project is already wired up at
+[vercel.com/clem21/md-notebook](https://vercel.com/clem21/md-notebook) and serves from
+[md-notebook.vercel.app](https://md-notebook.vercel.app/). Pushes to the production branch deploy
+automatically; other branches get preview URLs.
+
+To set it up from scratch elsewhere:
+
+1. Push the branch to GitHub.
+2. In Vercel: **Add New → Project → Import** the repository.
 3. Accept the detected framework (Next.js), build command `next build`, output `.next`.
 4. Deploy.
 
