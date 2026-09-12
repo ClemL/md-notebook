@@ -315,3 +315,269 @@ textarea.editor {
     width: 100%;
   }
 }
+
+/* ---------- tooltips ---------- */
+
+.tipwrap {
+  position: relative;
+  display: inline-flex;
+}
+
+/* Hidden tooltips use display:none so they never widen the page's scroll area;
+   the reveal delay comes from the animation instead of a transition. */
+.tipwrap > .tip {
+  position: absolute;
+  z-index: 30;
+  left: 50%;
+  transform: translateX(-50%);
+  display: none;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  background: #0b0e13;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 11px;
+  color: var(--fg);
+  pointer-events: none;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+}
+
+.tip-bottom > .tip {
+  top: calc(100% + 6px);
+}
+
+.tip-top > .tip {
+  bottom: calc(100% + 6px);
+}
+
+.tipwrap:hover > .tip,
+.tipwrap:focus-within > .tip {
+  display: flex;
+  animation: tip-in 90ms linear 260ms both;
+}
+
+@keyframes tip-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+kbd {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--fg-dim);
+  background: #1b2028;
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
+  border-radius: 3px;
+  padding: 0 4px;
+  margin: 0 1px;
+}
+
+/* ---------- search ---------- */
+
+.search {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-width: 180px;
+  flex: 0 1 240px;
+}
+
+.search input {
+  width: 100%;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--fg);
+  background: #0c0f14;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  padding: 5px 8px;
+  outline: none;
+}
+
+.search input:focus {
+  border-color: #4a6b8a;
+}
+
+.search .count {
+  position: absolute;
+  right: 8px;
+  font-size: 11px;
+  color: var(--fg-dim);
+  pointer-events: none;
+}
+
+/* ---------- menu ---------- */
+
+.menuwrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 40;
+  min-width: 260px;
+  background: var(--panel-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  padding: 5px;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.5);
+}
+
+.menu button,
+.menu label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  border: 0;
+  background: none;
+  text-align: left;
+  padding: 7px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.menu label {
+  justify-content: flex-start;
+  color: var(--fg-dim);
+}
+
+.menu button:hover,
+.menu label:hover {
+  background: #232a34;
+}
+
+.menu hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 5px 2px;
+}
+
+.menu code {
+  font-size: 11px;
+}
+
+/* ---------- banners, drop zone ---------- */
+
+.banner {
+  border: 1px solid #6b3430;
+  background: #2a1714;
+  color: #ffb4ae;
+  border-radius: 5px;
+  padding: 9px 12px;
+  font-size: 12px;
+  margin-bottom: 12px;
+}
+
+.dropzone {
+  position: fixed;
+  inset: 12px;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px dashed var(--accent);
+  border-radius: 8px;
+  background: rgba(15, 17, 21, 0.82);
+  color: var(--accent);
+  font-size: 14px;
+  pointer-events: none;
+}
+
+/* ---------- cell extras ---------- */
+
+.cell.selected {
+  border-color: #3f5f7d;
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.stamp {
+  font-size: 11px;
+  color: var(--fg-dim);
+  margin-right: 4px;
+}
+
+.cell-body.clamped {
+  position: relative;
+  max-height: 420px;
+  overflow: hidden;
+}
+
+.cell-body.clamped::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 90px;
+  background: linear-gradient(rgba(22, 26, 33, 0), var(--panel));
+  pointer-events: none;
+}
+
+button.expand {
+  position: absolute;
+  left: 50%;
+  bottom: 8px;
+  transform: translateX(-50%);
+  z-index: 2;
+  font-size: 11px;
+}
+
+button.expand.collapse {
+  position: static;
+  transform: none;
+  display: block;
+  margin: 0 auto 10px;
+}
+
+/* ---------- code block copy ---------- */
+
+.codeblock {
+  position: relative;
+  max-width: 100%;
+}
+
+.codeblock .codecopy {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  font-size: 10px;
+  padding: 3px 7px;
+  opacity: 0;
+  transition: opacity 100ms linear;
+}
+
+.codeblock:hover .codecopy,
+.codeblock .codecopy:focus-visible {
+  opacity: 1;
+}
+
+.md li.task {
+  list-style: none;
+  margin-left: -18px;
+}
+
+/* In a loose list each item's text is wrapped in <p>; keep it beside the checkbox. */
+.md li.task > p:first-of-type {
+  display: inline;
+}
+
+.md li.task > input[type="checkbox"] {
+  margin-right: 8px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.hint kbd {
+  margin: 0 2px;
+}

@@ -1,29 +1,66 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Btn from "./Btn";
+import CellView from "./CellView";
 import {
   Cell,
+  STORAGE_KEY,
   downloadText,
   joinCells,
   loadCells,
-  newId,
-  readClipboard,
+  makeBackup,
+  makeCell,
+  matchesQuery,
+  parseBackup,
+  parseStored,
   saveCells,
+  splitMarkdown,
   timestamp,
   toCheckboxes,
+  toggleTaskAtLine,
   writeClipboard,
 } from "@/lib/markdown";
-import MarkdownView from "./MarkdownView";
+import { readClipboardSmart } from "@/lib/richPaste";
 
 const SEP_KEY = "md-notebook:separators";
+const RICH_KEY = "md-notebook:richpaste";
+const HISTORY_LIMIT = 30;
+
+const isTypingTarget = (el: EventTarget | null) =>
+  el instanceof HTMLElement &&
+  (el.tagName === "TEXTAREA" || el.tagName === "INPUT" || el.isContentEditable);
 
 export default function Notebook() {
   const [cells, setCells] = useState<Cell[]>([]);
+  // History lives in refs: a snapshot must be read when the change happens, not when a lazy
+  // state updater later runs, or it captures the post-change state. `histVersion` only exists
+  // to re-render the undo/redo buttons.
+  const [histVersion, setHistVersion] = useState(0);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
   const [separators, setSeparators] = useState(true);
+  const [richPaste, setRichPaste] = useState(true);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [storageOk, setStorageOk] = useState(true);
+  const [dragging, setDragging] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+
+  const cellsRef = useRef<Cell[]>([]);
+  const pastRef = useRef<Cell[][]>([]);
+  const futureRef = useRef<Cell[][]>([]);
+  const editingIdRef = useRef<string | null>(null);
+  const skipSaveRef = useRef(false);
+  const editSnapshotRef = useRef<string | null>(null);
   const toastTimer = useRef<number | null>(null);
+  const searchRef = useRef<HTMLInputElement | null>(null);
+  const fileRef = useRef<HTMLInputElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  cellsRef.current = cells;
+  editingIdRef.current = editingId;
 
   const say = useCallback((msg: string) => {
     setToast(msg);
@@ -31,165 +68,649 @@ export default function Notebook() {
     toastTimer.current = window.setTimeout(() => setToast(null), 3200);
   }, []);
 
-  // Load persisted state after mount so server and client markup match.
+  /* ---------------------------------------------------------------- state */
+
+  const bumpHistory = useCallback(() => setHistVersion((v) => v + 1), []);
+
+  // Structural change: snapshot the current cells so Ctrl+Z can step back.
+  const apply = useCallback(
+    (next: Cell[]) => {
+      pastRef.current = [...pastRef.current, cellsRef.current].slice(-HISTORY_LIMIT);
+      futureRef.current = [];
+      cellsRef.current = next;
+      setCells(next);
+      bumpHistory();
+    },
+    [bumpHistory],
+  );
+
+  const mutate = useCallback(
+    (fn: (prev: Cell[]) => Cell[]) => {
+      const next = fn(cellsRef.current);
+      if (next !== cellsRef.current) apply(next);
+    },
+    [apply],
+  );
+
+  const undo = useCallback(() => {
+    if (!pastRef.current.length) return say("Nothing to undo.");
+    const prev = pastRef.current[pastRef.current.length - 1];
+    pastRef.current = pastRef.current.slice(0, -1);
+    futureRef.current = [cellsRef.current, ...futureRef.current].slice(0, HISTORY_LIMIT);
+    cellsRef.current = prev;
+    setCells(prev);
+    setEditingId(null);
+    bumpHistory();
+  }, [bumpHistory, say]);
+
+  const redo = useCallback(() => {
+    if (!futureRef.current.length) return;
+    const next = futureRef.current[0];
+    futureRef.current = futureRef.current.slice(1);
+    pastRef.current = [...pastRef.current, cellsRef.current].slice(-HISTORY_LIMIT);
+    cellsRef.current = next;
+    setCells(next);
+    setEditingId(null);
+    bumpHistory();
+  }, [bumpHistory]);
+
+  /* -------------------------------------------------------------- storage */
+
   useEffect(() => {
     setCells(loadCells());
     setSeparators(localStorage.getItem(SEP_KEY) !== "0");
+    setRichPaste(localStorage.getItem(RICH_KEY) !== "0");
     setLoaded(true);
   }, []);
 
   useEffect(() => {
-    if (loaded) saveCells(cells);
+    if (!loaded) return;
+    if (skipSaveRef.current) {
+      skipSaveRef.current = false;
+      return;
+    }
+    setStorageOk(saveCells(cells));
   }, [cells, loaded]);
 
   useEffect(() => {
     if (loaded) localStorage.setItem(SEP_KEY, separators ? "1" : "0");
   }, [separators, loaded]);
 
-  const appendCell = useCallback((text: string) => {
-    const cell: Cell = { id: newId(), text };
-    setCells((prev) => [...prev, cell]);
-    setEditingId(cell.id);
-    return cell.id;
-  }, []);
+  useEffect(() => {
+    if (loaded) localStorage.setItem(RICH_KEY, richPaste ? "1" : "0");
+  }, [richPaste, loaded]);
+
+  // Another tab wrote the notebook: adopt its state instead of overwriting it on our next save.
+  // An entry being edited here is preserved, so a background tab cannot discard in-progress text.
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== STORAGE_KEY || e.newValue === null) return;
+      const incoming = parseStored(e.newValue);
+      const editing = editingIdRef.current;
+      let merged = incoming;
+      if (editing) {
+        const local = cellsRef.current.find((c) => c.id === editing);
+        if (local) {
+          const at = incoming.findIndex((c) => c.id === editing);
+          merged =
+            at >= 0
+              ? incoming.map((c) => (c.id === editing ? local : c))
+              : [...incoming, local];
+        }
+      }
+      // Only echo back to storage when the merge actually differs from what we received.
+      skipSaveRef.current = merged === incoming;
+      cellsRef.current = merged;
+      setCells(merged);
+      if (merged !== incoming) say("Merged an update from another tab; your open entry was kept.");
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [say]);
+
+  /* ------------------------------------------------------------- mutators */
+
+  const appendCell = useCallback(
+    (text: string, after?: string) => {
+      const cell = makeCell(text);
+      mutate((prev) => {
+        if (!after) return [...prev, cell];
+        const i = prev.findIndex((c) => c.id === after);
+        if (i < 0) return [...prev, cell];
+        return [...prev.slice(0, i + 1), cell, ...prev.slice(i + 1)];
+      });
+      setSelectedId(cell.id);
+      setEditingId(cell.id);
+      editSnapshotRef.current = null;
+      return cell.id;
+    },
+    [mutate],
+  );
+
+  const insertBefore = useCallback(
+    (id: string) => {
+      const cell = makeCell("");
+      mutate((prev) => {
+        const i = prev.findIndex((c) => c.id === id);
+        if (i < 0) return [...prev, cell];
+        return [...prev.slice(0, i), cell, ...prev.slice(i)];
+      });
+      setSelectedId(cell.id);
+      setEditingId(cell.id);
+    },
+    [mutate],
+  );
 
   const newFromClipboard = useCallback(async () => {
     let text = "";
-    let failure: string | null = null;
+    let note: string | null = null;
+    let rich = false;
     try {
-      text = await readClipboard();
+      const payload = await readClipboardSmart(richPaste);
+      text = payload.text;
+      rich = payload.rich;
     } catch {
-      failure = "Clipboard read was blocked — press Ctrl+V to paste into the new entry.";
+      note = "Clipboard read was blocked — press Ctrl+V to paste into the new entry.";
     }
     appendCell(text);
-    if (failure) say(failure);
+    if (note) say(note);
     else if (!text.trim()) say("Clipboard was empty — new entry is blank.");
-  }, [appendCell, say]);
+    else if (rich) say("Pasted as markdown (converted from rich text).");
+  }, [appendCell, richPaste, say]);
+
+  const beginEdit = useCallback((id: string) => {
+    const cell = cellsRef.current.find((c) => c.id === id);
+    editSnapshotRef.current = cell ? cell.text : null;
+    setSelectedId(id);
+    setEditingId(id);
+  }, []);
+
+  // Keystrokes do not each become an undo step; the snapshot taken at edit start is pushed
+  // once, when the entry is committed with different text.
+  const commitEdit = useCallback(() => {
+    const id = editingIdRef.current;
+    setEditingId(null);
+    if (!id) return;
+    const before = editSnapshotRef.current;
+    editSnapshotRef.current = null;
+    const after = cellsRef.current.find((c) => c.id === id)?.text;
+    if (before === null || after === undefined || before === after) return;
+    const restored = cellsRef.current.map((c) => (c.id === id ? { ...c, text: before } : c));
+    pastRef.current = [...pastRef.current, restored].slice(-HISTORY_LIMIT);
+    futureRef.current = [];
+    bumpHistory();
+  }, [bumpHistory]);
 
   const update = useCallback((id: string, text: string) => {
-    setCells((prev) => prev.map((c) => (c.id === id ? { ...c, text } : c)));
+    const next = cellsRef.current.map((c) =>
+      c.id === id ? { ...c, text, updatedAt: Date.now() } : c,
+    );
+    cellsRef.current = next;
+    setCells(next);
   }, []);
 
-  const remove = useCallback((id: string) => {
-    setCells((prev) => prev.filter((c) => c.id !== id));
-    setEditingId((cur) => (cur === id ? null : cur));
-  }, []);
+  const remove = useCallback(
+    (id: string) => {
+      const i = cellsRef.current.findIndex((c) => c.id === id);
+      mutate((prev) => prev.filter((c) => c.id !== id));
+      if (editingIdRef.current === id) setEditingId(null);
+      const rest = cellsRef.current;
+      setSelectedId(rest.length ? rest[Math.min(i, rest.length - 1)].id : null);
+    },
+    [mutate],
+  );
 
-  const move = useCallback((id: string, delta: -1 | 1) => {
-    setCells((prev) => {
-      const i = prev.findIndex((c) => c.id === id);
-      const j = i + delta;
-      if (i < 0 || j < 0 || j >= prev.length) return prev;
-      const next = [...prev];
-      [next[i], next[j]] = [next[j], next[i]];
-      return next;
-    });
-  }, []);
+  const move = useCallback(
+    (id: string, delta: -1 | 1) => {
+      mutate((prev) => {
+        const i = prev.findIndex((c) => c.id === id);
+        const j = i + delta;
+        if (i < 0 || j < 0 || j >= prev.length) return prev;
+        const next = [...prev];
+        [next[i], next[j]] = [next[j], next[i]];
+        return next;
+      });
+    },
+    [mutate],
+  );
 
-  const checkbox = useCallback((id: string) => {
-    setCells((prev) => prev.map((c) => (c.id === id ? { ...c, text: toCheckboxes(c.text) } : c)));
-  }, []);
+  const checkbox = useCallback(
+    (id: string) => {
+      mutate((prev) =>
+        prev.map((c) =>
+          c.id === id ? { ...c, text: toCheckboxes(c.text), updatedAt: Date.now() } : c,
+        ),
+      );
+    },
+    [mutate],
+  );
 
   const checkboxAll = useCallback(() => {
-    setCells((prev) => prev.map((c) => ({ ...c, text: toCheckboxes(c.text) })));
-  }, []);
+    mutate((prev) => prev.map((c) => ({ ...c, text: toCheckboxes(c.text), updatedAt: Date.now() })));
+    say("Every line in every entry is now a task.");
+  }, [mutate, say]);
+
+  const toggleTask = useCallback(
+    (id: string, line: number) => {
+      mutate((prev) =>
+        prev.map((c) =>
+          c.id === id ? { ...c, text: toggleTaskAtLine(c.text, line), updatedAt: Date.now() } : c,
+        ),
+      );
+    },
+    [mutate],
+  );
+
+  /* ------------------------------------------------------- search + bulk */
+
+  const visible = useMemo(() => cells.filter((c) => matchesQuery(c, query)), [cells, query]);
+  const filtering = query.trim().length > 0;
+  const canUndo = useMemo(() => pastRef.current.length > 0, [histVersion]);
+  const canRedo = useMemo(() => futureRef.current.length > 0, [histVersion]);
 
   const copyAll = useCallback(async () => {
-    const text = joinCells(cells, separators);
+    const text = joinCells(visible, separators);
     if (!text.trim()) return say("Nothing to copy.");
     try {
       await writeClipboard(text);
-      say(`Copied ${cells.length} ${cells.length === 1 ? "entry" : "entries"} to the clipboard.`);
+      say(`Copied ${visible.length} ${visible.length === 1 ? "entry" : "entries"}${filtering ? " (filtered)" : ""}.`);
     } catch {
       say("Copy failed — the browser blocked clipboard write.");
     }
-  }, [cells, separators, say]);
+  }, [visible, separators, filtering, say]);
 
   const exportAll = useCallback(() => {
-    const text = joinCells(cells, separators);
+    const text = joinCells(visible, separators);
     if (!text.trim()) return say("Nothing to export.");
     const name = `md-notebook_${timestamp()}.md`;
     downloadText(name, text);
     say(`Exported ${name}`);
-  }, [cells, separators, say]);
+  }, [visible, separators, say]);
+
+  const backup = useCallback(() => {
+    if (!cells.length) return say("Nothing to back up.");
+    const name = `md-notebook-backup_${timestamp()}.json`;
+    downloadText(name, makeBackup(cells), "application/json");
+    say(`Saved ${name} (all ${cells.length} entries, timestamps included).`);
+  }, [cells, say]);
 
   const clearAll = useCallback(() => {
     if (!cells.length) return;
-    if (!window.confirm(`Delete all ${cells.length} entries? This cannot be undone.`)) return;
-    setCells([]);
+    if (!window.confirm(`Delete all ${cells.length} entries? Ctrl+Z can undo this.`)) return;
+    apply([]);
     setEditingId(null);
-  }, [cells.length]);
+    setSelectedId(null);
+  }, [cells.length, apply]);
 
-  // Ctrl/Cmd+Shift+Enter: new empty entry from anywhere.
+  /* --------------------------------------------------------------- import */
+
+  const importFiles = useCallback(
+    async (files: FileList | File[]) => {
+      const list = Array.from(files);
+      if (!list.length) return;
+      let added = 0;
+      for (const file of list) {
+        const body = await file.text();
+        if (file.name.toLowerCase().endsWith(".json")) {
+          let restored: Cell[];
+          try {
+            restored = parseBackup(body);
+          } catch {
+            say(`${file.name} is not a md-notebook backup.`);
+            continue;
+          }
+          const replace =
+            cellsRef.current.length === 0 ||
+            window.confirm(
+              `Replace the ${cellsRef.current.length} current entries with ${restored.length} from ${file.name}?\n\nCancel appends them instead. Either way Ctrl+Z undoes it.`,
+            );
+          apply(replace ? restored : [...cellsRef.current, ...restored]);
+          added += restored.length;
+        } else {
+          const parts = splitMarkdown(body);
+          if (!parts.length) continue;
+          apply([...cellsRef.current, ...parts]);
+          added += parts.length;
+        }
+      }
+      if (added) say(`Imported ${added} ${added === 1 ? "entry" : "entries"}.`);
+    },
+    [apply, say],
+  );
+
+  useEffect(() => {
+    const onDragOver = (e: DragEvent) => {
+      if (!e.dataTransfer?.types.includes("Files")) return;
+      e.preventDefault();
+      setDragging(true);
+    };
+    const onDragLeave = (e: DragEvent) => {
+      if (e.relatedTarget === null) setDragging(false);
+    };
+    const onDrop = (e: DragEvent) => {
+      if (!e.dataTransfer?.files.length) return;
+      e.preventDefault();
+      setDragging(false);
+      void importFiles(e.dataTransfer.files);
+    };
+    window.addEventListener("dragover", onDragOver);
+    window.addEventListener("dragleave", onDragLeave);
+    window.addEventListener("drop", onDrop);
+    return () => {
+      window.removeEventListener("dragover", onDragOver);
+      window.removeEventListener("dragleave", onDragLeave);
+      window.removeEventListener("drop", onDrop);
+    };
+  }, [importFiles]);
+
+  /* ------------------------------------------------------------ shortcuts */
+
+  const selectRelative = useCallback(
+    (delta: -1 | 1) => {
+      if (!visible.length) return;
+      const i = visible.findIndex((c) => c.id === selectedId);
+      const next = i < 0 ? (delta === 1 ? 0 : visible.length - 1) : Math.min(Math.max(i + delta, 0), visible.length - 1);
+      setSelectedId(visible[next].id);
+      document.getElementById(`cell-${visible[next].id}`)?.scrollIntoView({ block: "nearest" });
+    },
+    [visible, selectedId],
+  );
+
+  const dKey = useRef(0);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "Enter") {
+      const mod = e.ctrlKey || e.metaKey;
+      const typing = isTypingTarget(e.target);
+
+      if (mod && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        e.shiftKey ? redo() : undo();
+        return;
+      }
+      if (mod && e.key.toLowerCase() === "y") {
+        e.preventDefault();
+        redo();
+        return;
+      }
+      if (mod && e.shiftKey && e.key === "Enter") {
         e.preventDefault();
         appendCell("");
+        return;
+      }
+      if (mod && e.shiftKey && e.key.toLowerCase() === "v" && !typing) {
+        e.preventDefault();
+        void newFromClipboard();
+        return;
+      }
+      if (mod && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        searchRef.current?.focus();
+        searchRef.current?.select();
+        return;
+      }
+      if (mod && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        exportAll();
+        return;
+      }
+      if (mod && e.altKey && e.key.toLowerCase() === "c") {
+        e.preventDefault();
+        void copyAll();
+        return;
+      }
+      if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown") && selectedId) {
+        e.preventDefault();
+        move(selectedId, e.key === "ArrowUp" ? -1 : 1);
+        return;
+      }
+      if (typing || mod || e.altKey) return;
+
+      // Command mode: no text field has focus.
+      switch (e.key) {
+        case "j":
+        case "ArrowDown":
+          e.preventDefault();
+          selectRelative(1);
+          break;
+        case "k":
+        case "ArrowUp":
+          e.preventDefault();
+          selectRelative(-1);
+          break;
+        case "Enter":
+        case "e":
+          if (selectedId) {
+            e.preventDefault();
+            beginEdit(selectedId);
+          }
+          break;
+        case "a":
+          if (selectedId) {
+            e.preventDefault();
+            insertBefore(selectedId);
+          }
+          break;
+        case "b":
+          e.preventDefault();
+          appendCell("", selectedId ?? undefined);
+          break;
+        case "c":
+          if (selectedId) {
+            e.preventDefault();
+            const cell = cellsRef.current.find((c) => c.id === selectedId);
+            if (cell) void writeClipboard(cell.text).then(() => say("Entry copied."));
+          }
+          break;
+        case "t":
+          if (selectedId) {
+            e.preventDefault();
+            checkbox(selectedId);
+          }
+          break;
+        case "/":
+          e.preventDefault();
+          searchRef.current?.focus();
+          break;
+        case "d": {
+          const now = Date.now();
+          if (now - dKey.current < 600 && selectedId) {
+            dKey.current = 0;
+            remove(selectedId);
+          } else {
+            dKey.current = now;
+          }
+          break;
+        }
+        default:
+          break;
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [appendCell]);
+  }, [
+    appendCell,
+    beginEdit,
+    checkbox,
+    copyAll,
+    exportAll,
+    insertBefore,
+    move,
+    newFromClipboard,
+    redo,
+    remove,
+    say,
+    selectRelative,
+    selectedId,
+    undo,
+  ]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false);
+    };
+    const onEsc = (e: KeyboardEvent) => e.key === "Escape" && setMenuOpen(false);
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onEsc);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onEsc);
+    };
+  }, [menuOpen]);
+
+  /* ----------------------------------------------------------------- view */
 
   return (
-    <div className="app">
+    // data-ready flips once client state is restored; tests wait on it instead of racing hydration.
+    <div className="app" data-ready={loaded ? "true" : undefined}>
       <header className="bar">
         <span className="title">md-notebook</span>
-        <button className="primary" onClick={newFromClipboard}>
+
+        <Btn className="primary" tip="New entry from clipboard" hotkey="Ctrl+Shift+V" onClick={newFromClipboard}>
           + Paste New
-        </button>
-        <button onClick={() => appendCell("")}>+ Empty</button>
-        <button onClick={checkboxAll} disabled={!cells.length}>
-          Checkbox All
-        </button>
-        <span className="spacer" />
-        <label className="toggle">
+        </Btn>
+        <Btn tip="New empty entry" hotkey="Ctrl+Shift+Enter" onClick={() => appendCell("")}>
+          + Empty
+        </Btn>
+        <Btn tip="Undo the last change" hotkey="Ctrl+Z" onClick={undo} disabled={!canUndo}>
+          Undo
+        </Btn>
+        <Btn tip="Redo the change you just undid" hotkey="Ctrl+Shift+Z" onClick={redo} disabled={!canRedo}>
+          Redo
+        </Btn>
+
+        <span className="search">
           <input
-            type="checkbox"
-            checked={separators}
-            onChange={(e) => setSeparators(e.target.checked)}
+            ref={searchRef}
+            type="search"
+            value={query}
+            placeholder="Search entries…  (Ctrl+K)"
+            aria-label="Search entries"
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                setQuery("");
+                e.currentTarget.blur();
+              }
+            }}
           />
-          --- separators
-        </label>
-        <button onClick={copyAll} disabled={!cells.length}>
-          Copy All
-        </button>
-        <button onClick={exportAll} disabled={!cells.length}>
-          Export All
-        </button>
-        <button className="danger" onClick={clearAll} disabled={!cells.length}>
-          Clear
-        </button>
+          {filtering && (
+            <span className="count">
+              {visible.length}/{cells.length}
+            </span>
+          )}
+        </span>
+
+        <span className="spacer" />
+
+        <Btn
+          tip={filtering ? "Copy the filtered entries" : "Copy every entry to the clipboard"}
+          hotkey="Ctrl+Alt+C"
+          onClick={copyAll}
+          disabled={!visible.length}
+        >
+          Copy{filtering ? ` (${visible.length})` : " All"}
+        </Btn>
+        <Btn
+          tip={filtering ? "Download the filtered entries as .md" : "Download every entry as one .md file"}
+          hotkey="Ctrl+S"
+          onClick={exportAll}
+          disabled={!visible.length}
+        >
+          Export{filtering ? ` (${visible.length})` : " All"}
+        </Btn>
+
+        <div className="menuwrap" ref={menuRef}>
+          <Btn tip="More actions" onClick={() => setMenuOpen((v) => !v)} aria-expanded={menuOpen}>
+            ⋯
+          </Btn>
+          {menuOpen && (
+            <div className="menu" role="menu">
+              <button onClick={() => { checkboxAll(); setMenuOpen(false); }}>
+                Checkbox All <kbd>t</kbd>
+              </button>
+              <button onClick={() => { fileRef.current?.click(); setMenuOpen(false); }}>
+                Import .md / .json…
+              </button>
+              <button onClick={() => { backup(); setMenuOpen(false); }}>Backup as .json</button>
+              <hr />
+              <label>
+                <input type="checkbox" checked={separators} onChange={(e) => setSeparators(e.target.checked)} />
+                <span>
+                  <code>---</code> between entries on export
+                </span>
+              </label>
+              <label>
+                <input type="checkbox" checked={richPaste} onChange={(e) => setRichPaste(e.target.checked)} />
+                <span>Convert rich paste to markdown</span>
+              </label>
+              <hr />
+              <button className="danger" onClick={() => { clearAll(); setMenuOpen(false); }}>
+                Delete all entries
+              </button>
+            </div>
+          )}
+        </div>
       </header>
 
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".md,.markdown,.txt,.json"
+        multiple
+        hidden
+        onChange={(e) => {
+          if (e.target.files) void importFiles(e.target.files);
+          e.target.value = "";
+        }}
+      />
+
+      {!storageOk && (
+        <div className="banner">
+          Local storage is full or blocked — entries are kept in memory only and will be lost on
+          reload. Use <strong>Backup as .json</strong> now.
+        </div>
+      )}
+
       <p className="hint">
-        Entries render on blur. Ctrl+Enter or Esc finishes an entry; Ctrl+Shift+Enter adds one.
-        Everything stays in this browser&apos;s local storage.
+        Entries render on blur. <kbd>Esc</kbd>/<kbd>Ctrl+Enter</kbd> commits · <kbd>j</kbd>
+        <kbd>k</kbd> move · <kbd>Enter</kbd> edit · <kbd>a</kbd>/<kbd>b</kbd> insert ·{" "}
+        <kbd>dd</kbd> delete · <kbd>/</kbd> search. Stored in this browser only.
       </p>
 
       {!loaded ? null : cells.length === 0 ? (
         <div className="empty-state">
-          No entries yet. <strong>+ Paste New</strong> drops your clipboard into a fresh entry.
+          No entries yet. <strong>+ Paste New</strong> drops your clipboard into a fresh entry, or
+          drag a <code>.md</code> file anywhere on this page.
+        </div>
+      ) : visible.length === 0 ? (
+        <div className="empty-state">
+          No entry matches <code>{query}</code>.
         </div>
       ) : (
-        cells.map((cell, i) => (
+        visible.map((cell, i) => (
           <CellView
             key={cell.id}
             cell={cell}
-            index={i}
-            total={cells.length}
+            index={cells.indexOf(cell)}
+            first={i === 0}
+            last={i === visible.length - 1}
             editing={editingId === cell.id}
-            onEdit={() => setEditingId(cell.id)}
-            onCommit={() => setEditingId((cur) => (cur === cell.id ? null : cur))}
+            selected={selectedId === cell.id}
+            onSelect={() => setSelectedId(cell.id)}
+            onEdit={() => beginEdit(cell.id)}
+            onCommit={commitEdit}
             onChange={(text) => update(cell.id, text)}
             onCheckbox={() => checkbox(cell.id)}
+            onToggleTask={(line) => toggleTask(cell.id, line)}
             onDelete={() => remove(cell.id)}
             onMove={(d) => move(cell.id, d)}
+            richPaste={richPaste}
             onCopy={async () => {
               try {
                 await writeClipboard(cell.text);
-                say(`Copied entry ${i + 1}.`);
+                say("Entry copied.");
               } catch {
                 say("Copy failed — the browser blocked clipboard write.");
               }
@@ -198,137 +719,8 @@ export default function Notebook() {
         ))
       )}
 
+      {dragging && <div className="dropzone">Drop .md or .json to import</div>}
       {toast && <div className="toast">{toast}</div>}
     </div>
-  );
-}
-
-type CellViewProps = {
-  cell: Cell;
-  index: number;
-  total: number;
-  editing: boolean;
-  onEdit: () => void;
-  onCommit: () => void;
-  onChange: (text: string) => void;
-  onCheckbox: () => void;
-  onCopy: () => void;
-  onDelete: () => void;
-  onMove: (delta: -1 | 1) => void;
-};
-
-function CellView({
-  cell,
-  index,
-  total,
-  editing,
-  onEdit,
-  onCommit,
-  onChange,
-  onCheckbox,
-  onCopy,
-  onDelete,
-  onMove,
-}: CellViewProps) {
-  const ref = useRef<HTMLTextAreaElement | null>(null);
-
-  const autosize = useCallback(() => {
-    const el = ref.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${Math.max(el.scrollHeight, 120)}px`;
-  }, []);
-
-  useEffect(() => {
-    if (!editing) return;
-    const el = ref.current;
-    if (!el) return;
-    el.focus();
-    el.setSelectionRange(el.value.length, el.value.length);
-    autosize();
-  }, [editing, autosize]);
-
-  useEffect(() => {
-    if (editing) autosize();
-  }, [cell.text, editing, autosize]);
-
-  const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Escape" || ((e.ctrlKey || e.metaKey) && e.key === "Enter" && !e.shiftKey)) {
-      e.preventDefault();
-      e.stopPropagation();
-      onCommit();
-      return;
-    }
-    if (e.key === "Tab") {
-      e.preventDefault();
-      const el = e.currentTarget;
-      const { selectionStart: s, selectionEnd: t, value } = el;
-      const next = `${value.slice(0, s)}  ${value.slice(t)}`;
-      onChange(next);
-      requestAnimationFrame(() => el.setSelectionRange(s + 2, s + 2));
-    }
-  };
-
-  // Keep focus on the textarea when a toolbar button is pressed mid-edit,
-  // so the blur-to-render behavior is not triggered by the toolbar itself.
-  const keepFocus = (e: React.MouseEvent) => {
-    if (editing) e.preventDefault();
-  };
-
-  return (
-    <section className={`cell${editing ? " editing" : ""}`}>
-      <div className="cell-head">
-        <span className="cell-index">[{index + 1}]</span>
-        {editing ? (
-          <button onMouseDown={keepFocus} onClick={onCommit}>
-            Done
-          </button>
-        ) : (
-          <button onClick={onEdit}>Edit</button>
-        )}
-        <button onMouseDown={keepFocus} onClick={onCheckbox} title="Prefix every line with * [ ]">
-          Checkbox
-        </button>
-        <button onMouseDown={keepFocus} onClick={onCopy}>
-          Copy
-        </button>
-        <span className="spacer" />
-        <button onMouseDown={keepFocus} onClick={() => onMove(-1)} disabled={index === 0} title="Move up">
-          ↑
-        </button>
-        <button
-          onMouseDown={keepFocus}
-          onClick={() => onMove(1)}
-          disabled={index === total - 1}
-          title="Move down"
-        >
-          ↓
-        </button>
-        <button className="danger" onMouseDown={keepFocus} onClick={onDelete} title="Delete entry">
-          ✕
-        </button>
-      </div>
-
-      <div className="cell-body">
-        {editing ? (
-          <textarea
-            ref={ref}
-            className="editor"
-            value={cell.text}
-            spellCheck={false}
-            placeholder="Markdown here. ``` fenced code, `inline`, tables, * [ ] tasks…"
-            onChange={(e) => onChange(e.target.value)}
-            onKeyDown={onKeyDown}
-            onBlur={onCommit}
-          />
-        ) : cell.text.trim() ? (
-          <MarkdownView text={cell.text} />
-        ) : (
-          <div className="empty-cell" onClick={onEdit}>
-            (empty entry — click Edit)
-          </div>
-        )}
-      </div>
-    </section>
   );
 }

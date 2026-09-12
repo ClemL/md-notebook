@@ -7,9 +7,12 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@joplin/turndown-plugin-gfm": "^1.0.68",
     "highlight.js": "11.11.1",
     "next": "^16.3.5",
     "react": "^19.3.0",
@@ -17,12 +20,16 @@
     "react-markdown": "10.1.0",
     "rehype-highlight": "7.0.2",
     "remark-breaks": "4.0.0",
-    "remark-gfm": "4.0.1"
+    "remark-gfm": "4.0.1",
+    "turndown": "^7.2.4"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@types/node": "22.15.3",
     "@types/react": "19.1.2",
     "@types/react-dom": "19.1.2",
-    "typescript": "5.8.3"
+    "@types/turndown": "^5.0.6",
+    "typescript": "5.8.3",
+    "vitest": "^5.0.0"
   }
 }

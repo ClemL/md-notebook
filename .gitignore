@@ -6,3 +6,9 @@ out/
 next-env.d.ts
 .DS_Store
 .env*.local
+
+# test output
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
