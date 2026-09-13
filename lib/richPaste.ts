@@ -59,10 +59,73 @@ export function htmlIsWorthConverting(html: string, plain: string): boolean {
 }
 
 export function tidyMarkdown(md: string): string {
-  return md
-    .replace(/ /g, " ")
+  return tightenLinks(md)
+    .replace(/\u00a0/g, " ")
     .replace(/[ \t]+$/gm, "")
     .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/**
+ * Turndown puts block wrappers inside a link on their own lines, so an anchor containing a <div>
+ * arrives as "[\n\nBoards\n\n](url)". Markdown link syntax gives that whitespace no meaning,
+ * so collapse it back into "[Boards](url)".
+ */
+export function tightenLinks(md: string): string {
+  return md.replace(
+    /\[[ \t\n]*([^\]]{0,300}?)[ \t\n]*\][ \t\n]*\([ \t\n]*(\S{0,2000}?)[ \t\n]*\)/g,
+    (whole: string, label: string, target: string) => {
+      const text = label.replace(/\s+/g, " ").trim();
+      const url = target.replace(/\s+/g, "").trim();
+      return url ? `[${text}](${url})` : whole;
+    },
+  );
+}
+
+/** A line that only separates breadcrumb segments, e.g. "/", "\>", "|", "\u203a". */
+const SEPARATOR_LINE = /^\\?[/>|\u203a\u00bb\u00b7\u2014\u2013-]$/;
+
+/** Block-level markdown, meaning the paste is a document rather than a run of inline content. */
+const BLOCK_LINE = /^(?:#{1,6}\s|>\s|```|~~~|\||\s{4}|(?:[-*+]|\d+[.)])\s)/;
+
+/**
+ * True for a paste that is really one line of inline content, which Turndown split across lines
+ * because the source wrapped each fragment in a block element — a breadcrumb or link trail.
+ * Deliberately narrow: several short fragments, at least one link, and nothing that reads as prose.
+ */
+export function isInlineRun(md: string): boolean {
+  const lines = md
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+  if (lines.length < 2 || lines.length > 40) return false;
+  if (!/\]\(\S+\)/.test(tightenLinks(md))) return false;
+
+  let words = 0;
+  for (const line of lines) {
+    if (SEPARATOR_LINE.test(line)) continue;
+    if (BLOCK_LINE.test(line)) return false;
+    if (line.length > 80) return false;
+    const count = line.split(/\s+/).length;
+    words += count;
+    // Sentence punctuation on a multi-word fragment means prose, not a breadcrumb segment.
+    if (count > 3 && /[.!?:;]$/.test(line.replace(/\)$/, ""))) return false;
+  }
+  return words <= 80;
+}
+
+/**
+ * Collapse an inline run onto a single line: "/ [Boards](url) / [Sprints](url)".
+ * Returns the input unchanged when it is not an inline run.
+ */
+export function flattenInlineRun(md: string): string {
+  if (!isInlineRun(md)) return md;
+  return tightenLinks(md)
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .join(" ")
+    .replace(/[ \t]+/g, " ")
     .trim();
 }
 
@@ -71,7 +134,7 @@ export async function htmlToMarkdown(html: string): Promise<string | null> {
   const convert = await getConverter();
   if (!convert) return null;
   try {
-    return tidyMarkdown(convert(html));
+    return flattenInlineRun(tidyMarkdown(convert(html)));
   } catch {
     return null;
   }

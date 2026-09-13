@@ -21,11 +21,16 @@ import {
   toggleTaskAtLine,
   writeClipboard,
 } from "@/lib/markdown";
+import { mergeTexts, splitAt } from "@/lib/editor";
 import { readClipboardSmart } from "@/lib/richPaste";
+import { TEMPLATES } from "@/lib/templates";
 
 const SEP_KEY = "md-notebook:separators";
 const RICH_KEY = "md-notebook:richpaste";
 const HISTORY_LIMIT = 30;
+
+type ToastAction = { label: string; run: () => void };
+type Toast = { message: string; action?: ToastAction };
 
 const isTypingTarget = (el: EventTarget | null) =>
   el instanceof HTMLElement &&
@@ -46,7 +51,8 @@ export default function Notebook() {
   const [storageOk, setStorageOk] = useState(true);
   const [dragging, setDragging] = useState(false);
   const [loaded, setLoaded] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
+  const [rawIds, setRawIds] = useState<Record<string, boolean>>({});
+  const [toast, setToast] = useState<Toast | null>(null);
 
   const cellsRef = useRef<Cell[]>([]);
   const pastRef = useRef<Cell[][]>([]);
@@ -58,14 +64,21 @@ export default function Notebook() {
   const searchRef = useRef<HTMLInputElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const undoRef = useRef<() => void>(() => {});
 
   cellsRef.current = cells;
   editingIdRef.current = editingId;
 
-  const say = useCallback((msg: string) => {
-    setToast(msg);
+  // A toast may carry one action, used to offer Undo after a delete or to jump to a duplicate.
+  const say = useCallback((message: string, action?: ToastAction) => {
+    setToast({ message, action });
     if (toastTimer.current) window.clearTimeout(toastTimer.current);
-    toastTimer.current = window.setTimeout(() => setToast(null), 3200);
+    toastTimer.current = window.setTimeout(() => setToast(null), action ? 7000 : 3200);
+  }, []);
+
+  const dismissToast = useCallback(() => {
+    if (toastTimer.current) window.clearTimeout(toastTimer.current);
+    setToast(null);
   }, []);
 
   /* ---------------------------------------------------------------- state */
@@ -102,6 +115,8 @@ export default function Notebook() {
     setEditingId(null);
     bumpHistory();
   }, [bumpHistory, say]);
+
+  undoRef.current = undo;
 
   const redo = useCallback(() => {
     if (!futureRef.current.length) return;
@@ -201,6 +216,15 @@ export default function Notebook() {
     [mutate],
   );
 
+  const jumpTo = useCallback((id: string) => {
+    setQuery("");
+    setSelectedId(id);
+    setEditingId(null);
+    requestAnimationFrame(() =>
+      document.getElementById(`cell-${id}`)?.scrollIntoView({ block: "center", behavior: "smooth" }),
+    );
+  }, []);
+
   const newFromClipboard = useCallback(async () => {
     let text = "";
     let note: string | null = null;
@@ -212,11 +236,27 @@ export default function Notebook() {
     } catch {
       note = "Clipboard read was blocked — press Ctrl+V to paste into the new entry.";
     }
+
+    // The same string pasted twice is almost always an accident in a scratchpad.
+    const trimmed = text.trim();
+    if (trimmed) {
+      const twin = cellsRef.current.find((c) => c.text.trim() === trimmed);
+      if (twin) {
+        const at = cellsRef.current.indexOf(twin) + 1;
+        jumpTo(twin.id);
+        say(`Already saved as entry ${at} — jumped to it.`, {
+          label: "Add anyway",
+          run: () => appendCell(text),
+        });
+        return;
+      }
+    }
+
     appendCell(text);
     if (note) say(note);
-    else if (!text.trim()) say("Clipboard was empty — new entry is blank.");
+    else if (!trimmed) say("Clipboard was empty — new entry is blank.");
     else if (rich) say("Pasted as markdown (converted from rich text).");
-  }, [appendCell, richPaste, say]);
+  }, [appendCell, jumpTo, richPaste, say]);
 
   const beginEdit = useCallback((id: string) => {
     const cell = cellsRef.current.find((c) => c.id === id);
@@ -256,8 +296,53 @@ export default function Notebook() {
       if (editingIdRef.current === id) setEditingId(null);
       const rest = cellsRef.current;
       setSelectedId(rest.length ? rest[Math.min(i, rest.length - 1)].id : null);
+      say(`Deleted entry ${i + 1}.`, { label: "Undo", run: () => undoRef.current() });
     },
-    [mutate],
+    [mutate, say],
+  );
+
+  const splitCell = useCallback(
+    (id: string, caret: number) => {
+      const cell = cellsRef.current.find((c) => c.id === id);
+      if (!cell) return;
+      const [head, tail] = splitAt(cell.text, caret);
+      if (!head || !tail) return say("Nothing to split — put the caret between two lines.");
+      const now = Date.now();
+      const second = makeCell(tail, now);
+      mutate((prev) =>
+        prev.flatMap((c) => (c.id === id ? [{ ...c, text: head, updatedAt: now }, second] : [c])),
+      );
+      setEditingId(null);
+      setSelectedId(second.id);
+      say("Entry split in two.", { label: "Undo", run: () => undoRef.current() });
+    },
+    [mutate, say],
+  );
+
+  const mergeWithNext = useCallback(
+    (id: string) => {
+      const i = cellsRef.current.findIndex((c) => c.id === id);
+      if (i < 0 || i === cellsRef.current.length - 1) return;
+      const next = cellsRef.current[i + 1];
+      const merged = mergeTexts(cellsRef.current[i].text, next.text);
+      mutate((prev) =>
+        prev
+          .map((c) => (c.id === id ? { ...c, text: merged, updatedAt: Date.now() } : c))
+          .filter((c) => c.id !== next.id),
+      );
+      setSelectedId(id);
+      say("Merged with the entry below.", { label: "Undo", run: () => undoRef.current() });
+    },
+    [mutate, say],
+  );
+
+  const insertTemplate = useCallback(
+    (id: string) => {
+      const template = TEMPLATES.find((t) => t.id === id);
+      if (!template) return;
+      appendCell(template.build());
+    },
+    [appendCell],
   );
 
   const move = useCallback(
@@ -337,10 +422,12 @@ export default function Notebook() {
   const clearAll = useCallback(() => {
     if (!cells.length) return;
     if (!window.confirm(`Delete all ${cells.length} entries? Ctrl+Z can undo this.`)) return;
+    const count = cells.length;
     apply([]);
     setEditingId(null);
     setSelectedId(null);
-  }, [cells.length, apply]);
+    say(`Deleted all ${count} entries.`, { label: "Undo", run: () => undoRef.current() });
+  }, [cells.length, apply, say]);
 
   /* --------------------------------------------------------------- import */
 
@@ -508,6 +595,18 @@ export default function Notebook() {
             checkbox(selectedId);
           }
           break;
+        case "r":
+          if (selectedId) {
+            e.preventDefault();
+            setRawIds((prev) => ({ ...prev, [selectedId]: !prev[selectedId] }));
+          }
+          break;
+        case "M":
+          if (selectedId) {
+            e.preventDefault();
+            mergeWithNext(selectedId);
+          }
+          break;
         case "/":
           e.preventDefault();
           searchRef.current?.focus();
@@ -535,6 +634,7 @@ export default function Notebook() {
     copyAll,
     exportAll,
     insertBefore,
+    mergeWithNext,
     move,
     newFromClipboard,
     redo,
@@ -630,6 +730,14 @@ export default function Notebook() {
               <button onClick={() => { checkboxAll(); setMenuOpen(false); }}>
                 Checkbox All <kbd>t</kbd>
               </button>
+              <hr />
+              <span className="menu-label">Insert template</span>
+              {TEMPLATES.map((t) => (
+                <button key={t.id} onClick={() => { insertTemplate(t.id); setMenuOpen(false); }}>
+                  {t.label}
+                </button>
+              ))}
+              <hr />
               <button onClick={() => { fileRef.current?.click(); setMenuOpen(false); }}>
                 Import .md / .json…
               </button>
@@ -676,7 +784,8 @@ export default function Notebook() {
       <p className="hint">
         Entries render on blur. <kbd>Esc</kbd>/<kbd>Ctrl+Enter</kbd> commits · <kbd>j</kbd>
         <kbd>k</kbd> move · <kbd>Enter</kbd> edit · <kbd>a</kbd>/<kbd>b</kbd> insert ·{" "}
-        <kbd>dd</kbd> delete · <kbd>/</kbd> search. Stored in this browser only.
+        <kbd>dd</kbd> delete · <kbd>r</kbd> raw · <kbd>Shift+M</kbd> merge ·{" "}
+        <kbd>Ctrl+Shift+-</kbd> split · <kbd>/</kbd> search. Stored in this browser only.
       </p>
 
       {!loaded ? null : cells.length === 0 ? (
@@ -698,7 +807,12 @@ export default function Notebook() {
             last={i === visible.length - 1}
             editing={editingId === cell.id}
             selected={selectedId === cell.id}
+            raw={!!rawIds[cell.id]}
+            canMerge={cells.indexOf(cell) < cells.length - 1}
             onSelect={() => setSelectedId(cell.id)}
+            onToggleRaw={() => setRawIds((prev) => ({ ...prev, [cell.id]: !prev[cell.id] }))}
+            onSplit={(caret) => splitCell(cell.id, caret)}
+            onMerge={() => mergeWithNext(cell.id)}
             onEdit={() => beginEdit(cell.id)}
             onCommit={commitEdit}
             onChange={(text) => update(cell.id, text)}
@@ -720,7 +834,22 @@ export default function Notebook() {
       )}
 
       {dragging && <div className="dropzone">Drop .md or .json to import</div>}
-      {toast && <div className="toast">{toast}</div>}
+      {toast && (
+        <div className="toast" role="status">
+          <span>{toast.message}</span>
+          {toast.action && (
+            <button
+              className="toast-action"
+              onClick={() => {
+                toast.action?.run();
+                dismissToast();
+              }}
+            >
+              {toast.action.label}
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

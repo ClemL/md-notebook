@@ -284,3 +284,150 @@ test("no horizontal overflow at phone width", async ({ page }) => {
   );
   expect(overflow).toBeLessThanOrEqual(1);
 });
+
+test("an Azure DevOps breadcrumb pastes as one line of links", async ({ page }) => {
+  await page.getByRole("button", { name: /New empty entry/ }).click();
+  const ta = page.locator("textarea.editor");
+  // Shape of a real breadcrumb: block wrappers inside each anchor, which Turndown splits.
+  await ta.evaluate((el) => {
+    const dt = new DataTransfer();
+    dt.setData(
+      "text/html",
+      `<div class="breadcrumb"><div class="sep">/</div><div class="item">` +
+        `<a href="https://dev.azure.com/inscriptrx/Org/_workitems"><div>Boards</div></a></div>` +
+        `<div class="sep">/</div><div class="item">` +
+        `<a href="https://dev.azure.com/inscriptrx/Org/_sprints/directory"><div>Sprints</div></a></div></div>`,
+    );
+    dt.setData("text/plain", "/\nBoards\n/\nSprints");
+    el.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+  });
+  await expect(ta).toHaveValue(
+    "/ [Boards](https://dev.azure.com/inscriptrx/Org/_workitems) / [Sprints](https://dev.azure.com/inscriptrx/Org/_sprints/directory)",
+  );
+
+  await ta.press("Escape");
+  await expect(page.locator(".md a")).toHaveCount(2);
+  await expect(page.locator(".md a").first()).toHaveText("Boards");
+  await expect(page.locator(".md p")).toHaveCount(1);
+});
+
+test("a multi-paragraph article paste keeps its paragraphs", async ({ page }) => {
+  await page.getByRole("button", { name: /New empty entry/ }).click();
+  const ta = page.locator("textarea.editor");
+  await ta.evaluate((el) => {
+    const dt = new DataTransfer();
+    dt.setData(
+      "text/html",
+      "<p>The vendor feed lands at 2am and is loaded by the nightly job.</p>" +
+        "<p>See <a href='https://x.test/r'>the runbook</a> for retry steps and escalation.</p>",
+    );
+    dt.setData("text/plain", "The vendor feed lands at 2am. See the runbook.");
+    el.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+  });
+  await expect(ta).toHaveValue(/nightly job\.\n\nSee \[the runbook\]\(https:\/\/x\.test\/r\)/);
+});
+
+test("Enter continues list and task markers", async ({ page }) => {
+  await page.getByRole("button", { name: /New empty entry/ }).click();
+  const ta = page.locator("textarea.editor");
+
+  await ta.type("- alpha");
+  await ta.press("Enter");
+  await ta.type("beta");
+  await expect(ta).toHaveValue("- alpha\n- beta");
+
+  await ta.press("Enter");
+  await ta.press("Enter");
+  await expect(ta).toHaveValue("- alpha\n- beta\n");
+
+  await ta.fill("* [ ] first");
+  await ta.press("End");
+  await ta.press("Enter");
+  await ta.type("second");
+  await expect(ta).toHaveValue("* [ ] first\n* [ ] second");
+
+  await ta.fill("3. third");
+  await ta.press("End");
+  await ta.press("Enter");
+  await expect(ta).toHaveValue("3. third\n4. ");
+});
+
+test("pasting a URL over a selection makes a markdown link", async ({ page }) => {
+  await page.getByRole("button", { name: /New empty entry/ }).click();
+  const ta = page.locator("textarea.editor");
+  await ta.fill("see the runbook here");
+  await ta.evaluate((el: HTMLTextAreaElement) => {
+    el.setSelectionRange(8, 15);
+    const dt = new DataTransfer();
+    dt.setData("text/plain", "https://x.test/runbook");
+    el.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+  });
+  await expect(ta).toHaveValue("see the [runbook](https://x.test/runbook) here");
+});
+
+test("pasting the same clipboard twice jumps to the existing entry", async ({ page }) => {
+  await page.evaluate(() => navigator.clipboard.writeText("https://x.test/duplicate"));
+  await page.getByRole("button", { name: /New entry from clipboard/ }).click();
+  await page.locator("textarea.editor").press("Escape");
+  await expect(page.locator("section.cell")).toHaveCount(1);
+
+  await page.getByRole("button", { name: /New entry from clipboard/ }).click();
+  await expect(page.locator(".toast")).toContainText("Already saved as entry 1");
+  await expect(page.locator("section.cell")).toHaveCount(1);
+  await expect(page.locator("section.cell.selected")).toHaveCount(1);
+
+  await page.getByRole("button", { name: "Add anyway" }).click();
+  await expect(page.locator("section.cell")).toHaveCount(2);
+});
+
+test("deleting offers undo in the toast", async ({ page }) => {
+  await addEntry(page, "delete then restore");
+  await page.getByRole("button", { name: /Delete this entry/ }).click();
+  await expect(page.locator("section.cell")).toHaveCount(0);
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(page.locator("section.cell")).toHaveCount(1);
+  await expect(page.locator(".md")).toContainText("delete then restore");
+});
+
+test("entries split at the caret and merge with the one below", async ({ page }) => {
+  await addEntry(page, "first half\n\nsecond half");
+  await page.getByRole("button", { name: /Edit this entry/ }).click();
+  const ta = page.locator("textarea.editor");
+  await ta.evaluate((el: HTMLTextAreaElement) => el.setSelectionRange(10, 10));
+  await ta.press("Control+Shift+-");
+
+  await expect(page.locator("section.cell")).toHaveCount(2);
+  await expect(page.locator("section.cell").first()).toContainText("first half");
+  await expect(page.locator("section.cell").last()).toContainText("second half");
+
+  await page.locator("section.cell").first().getByRole("button", { name: /Merge this entry/ }).click();
+  await expect(page.locator("section.cell")).toHaveCount(1);
+  await page.getByRole("button", { name: /Edit this entry/ }).click();
+  await expect(page.locator("textarea.editor")).toHaveValue("first half\n\nsecond half");
+});
+
+test("raw view shows the source without opening the editor", async ({ page }) => {
+  await addEntry(page, "## Heading\n\n`code`");
+  await page.getByRole("button", { name: /Show the markdown source/ }).click();
+  await expect(page.locator("pre.raw")).toHaveText("## Heading\n\n`code`");
+  await expect(page.locator("textarea.editor")).toHaveCount(0);
+  await expect(page.locator(".md h2")).toHaveCount(0);
+
+  await page.getByRole("button", { name: /Show the rendered entry/ }).click();
+  await expect(page.locator(".md h2")).toHaveText("Heading");
+
+  // The r shortcut toggles it too.
+  await page.locator("section.cell").click({ position: { x: 5, y: 5 } });
+  await page.keyboard.press("r");
+  await expect(page.locator("pre.raw")).toBeVisible();
+});
+
+test("templates insert a dated skeleton", async ({ page }) => {
+  await page.getByRole("button", { name: "More actions" }).click();
+  await page.getByRole("button", { name: "Meeting summary" }).click();
+  const ta = page.locator("textarea.editor");
+  const today = new Date();
+  const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  await expect(ta).toHaveValue(new RegExp(`# Meeting — ${iso}`));
+  await expect(ta).toHaveValue(/## Decisions[\s\S]*\* \[ \]/);
+});

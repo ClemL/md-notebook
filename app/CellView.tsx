@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Btn from "./Btn";
 import MarkdownView from "./MarkdownView";
 import { Cell, formatStamp } from "@/lib/markdown";
+import { continueListOnEnter, insertAt, isUrl, wrapSelectionAsLink } from "@/lib/editor";
 import { htmlIsWorthConverting, htmlToMarkdown } from "@/lib/richPaste";
 
 const COLLAPSE_PX = 420;
@@ -15,7 +16,9 @@ type Props = {
   last: boolean;
   editing: boolean;
   selected: boolean;
+  raw: boolean;
   richPaste: boolean;
+  canMerge: boolean;
   onSelect: () => void;
   onEdit: () => void;
   onCommit: () => void;
@@ -25,6 +28,9 @@ type Props = {
   onCopy: () => void;
   onDelete: () => void;
   onMove: (delta: -1 | 1) => void;
+  onToggleRaw: () => void;
+  onSplit: (caret: number) => void;
+  onMerge: () => void;
 };
 
 export default function CellView({
@@ -34,7 +40,9 @@ export default function CellView({
   last,
   editing,
   selected,
+  raw,
   richPaste,
+  canMerge,
   onSelect,
   onEdit,
   onCommit,
@@ -44,6 +52,9 @@ export default function CellView({
   onCopy,
   onDelete,
   onMove,
+  onToggleRaw,
+  onSplit,
+  onMerge,
 }: Props) {
   const ref = useRef<HTMLTextAreaElement | null>(null);
   const bodyRef = useRef<HTMLDivElement | null>(null);
@@ -80,46 +91,74 @@ export default function CellView({
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [editing, cell.text]);
+  }, [editing, raw, cell.text]);
 
   useEffect(() => setExpanded(false), [cell.id]);
 
+  /**
+   * Write the new value and caret to the DOM before telling React, so the caret cannot be
+   * clobbered by a later frame — a deferred setSelectionRange loses races against fast typing.
+   * React then re-renders with a value the textarea already has and leaves the selection alone.
+   */
+  const applyEdit = (
+    el: HTMLTextAreaElement,
+    result: { text: string; caret: number } | null,
+  ) => {
+    if (!result) return false;
+    el.value = result.text;
+    el.setSelectionRange(result.caret, result.caret);
+    onChange(result.text);
+    return true;
+  };
+
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Escape" || ((e.ctrlKey || e.metaKey) && e.key === "Enter" && !e.shiftKey)) {
+    const el = e.currentTarget;
+    const mod = e.ctrlKey || e.metaKey;
+
+    if (e.key === "Escape" || (mod && e.key === "Enter" && !e.shiftKey)) {
       e.preventDefault();
       e.stopPropagation();
       onCommit();
       return;
     }
+    // Ctrl+Shift+- splits the entry at the caret, as in a notebook.
+    if (mod && e.shiftKey && (e.key === "-" || e.key === "_")) {
+      e.preventDefault();
+      e.stopPropagation();
+      onSplit(el.selectionStart);
+      return;
+    }
+    if (e.key === "Enter" && !e.shiftKey && !mod && el.selectionStart === el.selectionEnd) {
+      if (applyEdit(el, continueListOnEnter(el.value, el.selectionStart))) e.preventDefault();
+      return;
+    }
     if (e.key === "Tab") {
       e.preventDefault();
-      const el = e.currentTarget;
-      const { selectionStart: s, selectionEnd: t, value } = el;
-      onChange(`${value.slice(0, s)}  ${value.slice(t)}`);
-      requestAnimationFrame(() => el.setSelectionRange(s + 2, s + 2));
+      applyEdit(el, insertAt(el.value, el.selectionStart, el.selectionEnd, "  "));
     }
   };
 
-  // Rich paste: replace an HTML clipboard flavor with its markdown equivalent.
   const onPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
-    if (!richPaste) return;
-    const html = e.clipboardData.getData("text/html");
-    const plain = e.clipboardData.getData("text/plain");
-    if (!html || !htmlIsWorthConverting(html, plain)) return;
-    e.preventDefault();
     const el = e.currentTarget;
     const start = el.selectionStart;
     const end = el.selectionEnd;
-    const before = el.value.slice(0, start);
-    const after = el.value.slice(end);
+    const html = e.clipboardData.getData("text/html");
+    const plain = e.clipboardData.getData("text/plain");
+
+    // A URL pasted over selected text becomes a markdown link around that text.
+    if (start !== end && isUrl(plain)) {
+      e.preventDefault();
+      applyEdit(el, wrapSelectionAsLink(el.value, start, end, plain));
+      return;
+    }
+
+    // Rich paste: replace an HTML clipboard flavor with its markdown equivalent.
+    if (!richPaste || !html || !htmlIsWorthConverting(html, plain)) return;
+    e.preventDefault();
+    const source = el.value;
     void htmlToMarkdown(html).then((md) => {
-      const insert = md ?? plain;
-      onChange(`${before}${insert}${after}`);
-      requestAnimationFrame(() => {
-        const at = start + insert.length;
-        el.setSelectionRange(at, at);
-        el.focus();
-      });
+      applyEdit(el, insertAt(source, start, end, md ?? plain));
+      el.focus();
     });
   };
 
@@ -159,6 +198,30 @@ export default function CellView({
         <Btn tip="Copy this entry's markdown" hotkey="c" onMouseDown={keepFocus} onClick={onCopy}>
           Copy
         </Btn>
+        {editing ? (
+          <Btn
+            tip="Split this entry at the caret"
+            hotkey="Ctrl+Shift+-"
+            onMouseDown={keepFocus}
+            onClick={() => onSplit(ref.current?.selectionStart ?? cell.text.length)}
+          >
+            Split
+          </Btn>
+        ) : (
+          <Btn
+            tip={raw ? "Show the rendered entry" : "Show the markdown source without editing"}
+            hotkey="r"
+            onClick={onToggleRaw}
+            aria-pressed={raw}
+          >
+            {raw ? "Rendered" : "Raw"}
+          </Btn>
+        )}
+        {!editing && canMerge && (
+          <Btn tip="Merge this entry with the one below" hotkey="Shift+M" onClick={onMerge}>
+            Merge ↓
+          </Btn>
+        )}
         <span className="spacer" />
         <span className="stamp" title={`Created ${formatStamp(cell.createdAt)}`}>
           {formatStamp(cell.updatedAt)}
@@ -205,6 +268,8 @@ export default function CellView({
             onPaste={onPaste}
             onBlur={onCommit}
           />
+        ) : raw && cell.text.trim() ? (
+          <pre className="raw">{cell.text}</pre>
         ) : cell.text.trim() ? (
           <MarkdownView text={cell.text} onToggleTask={onToggleTask} />
         ) : (

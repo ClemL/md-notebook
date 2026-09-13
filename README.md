@@ -21,20 +21,38 @@ Everything lives in the browser's `localStorage` — no accounts, no server, no 
   clipboard content (Teams, Confluence, a web page) is converted to markdown; plain text is left
   alone. If the browser blocks clipboard reads, the entry is still created and focused so `Ctrl+V`
   works — and pasting into an open entry converts rich content the same way.
+- **Breadcrumbs paste as one line.** A link trail copied from a web app — Azure DevOps'
+  `/ Boards / Sprints`, say — arrives as block elements that Turndown splits across a dozen lines,
+  with the link text stranded inside `[` `]`. Those are collapsed back into
+  `/ [Boards](url) / [Sprints](url)` on a single line. The rule is deliberately narrow: it needs at
+  least one link, short fragments, no block markdown and no sentence punctuation, so pasted prose
+  and documents keep their paragraphs.
+- **Duplicate detection.** Pasting a string that already exists verbatim jumps to that entry and
+  says so instead of creating a twin; the toast offers *Add anyway*.
+- **Enter continues lists.** `- alpha` + Enter gives `- `, `* [x] done` gives `* [ ] `, `3. third`
+  gives `4. `, and Enter on an empty marker clears it.
+- **Paste a URL over a selection** to wrap it: select `runbook`, paste, get `[runbook](url)`.
+- **Split and merge.** `Ctrl+Shift+-` splits an entry at the caret; **Merge ↓** (or `Shift+M`) joins
+  an entry with the one below.
+- **Raw view.** `r` or the **Raw** button shows an entry's markdown source without opening the
+  editor, so you can read or copy it without risking an edit.
 - **Live task checkboxes.** Ticking a rendered `* [ ]` writes `[x]` back into the markdown source.
 - **Checkbox.** Prefixes every non-empty line of an entry with `* [ ] `. Idempotent — lines that are
   already tasks are left alone, and existing bullets (`- `, `1. `) are converted rather than doubled.
   **Checkbox All** applies it to every entry.
 - **Timestamps** on every entry, and long entries are clamped with *Show more* so one big paste does
   not bury the rest.
+- **Templates** in the ⋯ menu: meeting summary (dated, with Decisions and Todos sections), daily
+  scratch, code snippet, link list.
 - Per-entry **Copy**, reorder, and delete.
 
 ### Notebook
 
 - **Search** (`Ctrl+K` or `/`) filters entries by substring; every term must match. While a filter is
   active, **Copy** and **Export** act on the filtered set and say so.
-- **Undo / redo** (`Ctrl+Z`, `Ctrl+Shift+Z`) covers deletes, reorders, imports, checkbox conversions
-  and *Delete all* — 30 steps deep. Typing collapses into one undo step per editing session.
+- **Undo / redo** (`Ctrl+Z`, `Ctrl+Shift+Z`) covers deletes, reorders, splits, merges, imports,
+  checkbox conversions and *Delete all* — 30 steps deep. Typing collapses into one undo step per
+  editing session, and destructive actions put an **Undo** button in the toast.
 - **Copy All** concatenates entries to the clipboard; **Export All** downloads them as
   `md-notebook_yyyyMMdd_HHmm.md`; **Backup as .json** writes a lossless file including timestamps.
 - **Import.** Drag a `.md` file anywhere on the page (or use the ⋯ menu) to split it on `---` into
@@ -59,6 +77,9 @@ Every button's tooltip names its shortcut. Outside a text box the notebook is in
 | `dd` | Delete the selected entry |
 | `c` | Copy the selected entry |
 | `t` | Turn the selected entry's lines into tasks |
+| `r` | Toggle raw markdown view |
+| `Shift+M` | Merge the selected entry with the one below |
+| `Ctrl+Shift+-` | Split the entry being edited at the caret |
 | `Alt+↑` / `Alt+↓` | Move the entry up / down |
 | `/` or `Ctrl+K` | Search |
 | `Ctrl+Shift+V` | New entry from the clipboard |
