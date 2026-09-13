@@ -129,12 +129,67 @@ export function flattenInlineRun(md: string): string {
     .trim();
 }
 
+
+/** Azure DevOps hosts whose URLs carry {account}/{project}/_git/{repo} in the path. */
+function devOpsScope(url: string): { account?: string; project?: string; repo?: string } | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+  const host = parsed.hostname.toLowerCase();
+  const legacy = host.endsWith(".visualstudio.com");
+  if (host !== "dev.azure.com" && !legacy) return null;
+
+  const parts = parsed.pathname.split("/").filter(Boolean).map(decodeURIComponent);
+  // dev.azure.com/{account}/{project}/_git/{repo}; {account}.visualstudio.com/{project}/_git/{repo}
+  const account = legacy ? host.split(".")[0] : parts.shift();
+  const project = parts.shift();
+  const gitAt = parts.indexOf("_git");
+  const repo = gitAt >= 0 ? parts[gitAt + 1] : undefined;
+  return { account, project, repo };
+}
+
+const TRAIL_SEPARATOR = /\s*(?:>|\u203a|\u00bb)\s*/;
+
+/**
+ * Azure DevOps puts the file link first and the location after it, with the project name leading:
+ * "[StorageAccount.cs](url)Org > DataDownloader.SFTP". Read as a path that is backwards, and the
+ * project segment is noise, so rewrite it as "DataDownloader.SFTP > [StorageAccount.cs](url)".
+ * Only applies to a single Azure DevOps link followed by a ">"-separated trail.
+ */
+export function rewriteAzureDevOpsPath(md: string): string {
+  const line = md.trim();
+  if (line.includes("\n")) return md;
+
+  const match = line.match(/^\[([^\]]+)\]\((\S+)\)\s*(.*)$/);
+  if (!match) return md;
+  const [, label, url, trail] = match;
+  if (!trail.trim() || trail.includes("](")) return md;
+
+  const scope = devOpsScope(url);
+  if (!scope) return md;
+
+  const noise = new Set(
+    [scope.account, scope.project, label].filter(Boolean).map((v) => v!.toLowerCase()),
+  );
+  const segments = trail
+    .split(TRAIL_SEPARATOR)
+    .map((seg) => seg.trim())
+    .filter(Boolean)
+    .filter((seg) => !noise.has(seg.toLowerCase()));
+
+  const link = `[${label}](${url})`;
+  return segments.length ? `${segments.join(" > ")} > ${link}` : link;
+}
+
 /** Converts an HTML clipboard flavor to markdown; returns null when conversion is unavailable. */
 export async function htmlToMarkdown(html: string): Promise<string | null> {
   const convert = await getConverter();
   if (!convert) return null;
   try {
-    return flattenInlineRun(tidyMarkdown(convert(html)));
+    return rewriteAzureDevOpsPath(flattenInlineRun(tidyMarkdown(convert(html))));
   } catch {
     return null;
   }

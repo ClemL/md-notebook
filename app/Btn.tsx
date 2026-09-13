@@ -9,14 +9,16 @@ type BtnProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   hotkey?: string;
   /** Tooltip placement; cell toolbars sit close to the top of the viewport. */
   place?: "top" | "bottom";
+  /** Renders the button as the most recent copy/export action. */
+  flash?: boolean;
   children: ReactNode;
 };
 
-export default function Btn({ tip, hotkey, place = "bottom", children, ...rest }: BtnProps) {
+export default function Btn({ tip, hotkey, place = "bottom", flash, children, ...rest }: BtnProps) {
   const label = hotkey ? `${tip} (${hotkey})` : tip;
   return (
     <span className={`tipwrap tip-${place}`}>
-      <button {...rest} aria-label={label}>
+      <button {...rest} aria-label={label} data-flash={flash ? "on" : undefined}>
         {children}
       </button>
       <span className="tip" role="tooltip">

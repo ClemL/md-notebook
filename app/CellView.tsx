@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Btn from "./Btn";
 import MarkdownView from "./MarkdownView";
-import { Cell, formatStamp } from "@/lib/markdown";
+import ImageCell from "./ImageCell";
+import { Cell, formatStamp, isImageCell } from "@/lib/markdown";
 import { continueListOnEnter, insertAt, isUrl, wrapSelectionAsLink } from "@/lib/editor";
 import { htmlIsWorthConverting, htmlToMarkdown } from "@/lib/richPaste";
 
@@ -31,6 +32,8 @@ type Props = {
   onToggleRaw: () => void;
   onSplit: (caret: number) => void;
   onMerge: () => void;
+  /** True while this entry is the most recent copy target. */
+  flashed: boolean;
 };
 
 export default function CellView({
@@ -55,6 +58,7 @@ export default function CellView({
   onToggleRaw,
   onSplit,
   onMerge,
+  flashed,
 }: Props) {
   const ref = useRef<HTMLTextAreaElement | null>(null);
   const bodyRef = useRef<HTMLDivElement | null>(null);
@@ -170,6 +174,20 @@ export default function CellView({
 
   const clamped = !editing && overflowing && !expanded;
 
+  if (isImageCell(cell)) {
+    return (
+      <ImageCell
+        cell={cell}
+        index={index}
+        selected={selected}
+        flashed={flashed}
+        onSelect={onSelect}
+        onCopy={onCopy}
+        onDelete={onDelete}
+      />
+    );
+  }
+
   return (
     <section
       id={`cell-${cell.id}`}
@@ -195,7 +213,13 @@ export default function CellView({
         >
           Checkbox
         </Btn>
-        <Btn tip="Copy this entry's markdown" hotkey="c" onMouseDown={keepFocus} onClick={onCopy}>
+        <Btn
+          tip="Copy this entry's markdown"
+          hotkey="c"
+          flash={flashed}
+          onMouseDown={keepFocus}
+          onClick={onCopy}
+        >
           Copy
         </Btn>
         {editing ? (

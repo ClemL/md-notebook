@@ -431,3 +431,98 @@ test("templates insert a dated skeleton", async ({ page }) => {
   await expect(ta).toHaveValue(new RegExp(`# Meeting — ${iso}`));
   await expect(ta).toHaveValue(/## Decisions[\s\S]*\* \[ \]/);
 });
+
+test("an Azure DevOps file link pastes as path > link", async ({ page }) => {
+  const url =
+    "https://dev.azure.com/inscriptrx/Org/_git/DataDownloader.SFTP?path=/Downloader/StorageAccount.cs&_a=contents&version=GBrelease/10.0.0";
+  await page.getByRole("button", { name: /New empty entry/ }).click();
+  const ta = page.locator("textarea.editor");
+  await ta.evaluate((el, href) => {
+    const dt = new DataTransfer();
+    dt.setData(
+      "text/html",
+      `<div><a href="${href}">StorageAccount.cs</a><span>Org</span><span> &gt; </span><span>DataDownloader.SFTP</span></div>`,
+    );
+    dt.setData("text/plain", "StorageAccount.csOrg > DataDownloader.SFTP");
+    el.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+  }, url);
+  await expect(ta).toHaveValue(`DataDownloader.SFTP > [StorageAccount.cs](${url})`);
+});
+
+/** A tiny opaque PNG, built in the page so the paste carries a real image file. */
+async function pasteImage(page: Page) {
+  await page.evaluate(async () => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 120;
+    canvas.height = 80;
+    const ctx = canvas.getContext("2d")!;
+    ctx.fillStyle = "#7cc4ff";
+    ctx.fillRect(0, 0, 120, 80);
+    const blob: Blob = await new Promise((resolve) => canvas.toBlob((b) => resolve(b!), "image/png"));
+    const file = new File([blob], "screenshot.png", { type: "image/png" });
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    document.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+  });
+}
+
+test("a pasted image becomes an image entry with copy and delete only", async ({ page }) => {
+  await pasteImage(page);
+  const cell = page.locator("section.cell.image-cell");
+  await expect(cell).toHaveCount(1);
+  await expect(cell.locator("button.thumb img")).toHaveAttribute("src", /^data:image\/png;base64,/);
+  await expect(cell.locator(".image-label")).toContainText("120×80");
+  await expect(cell.locator(".stamp")).toHaveText(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
+
+  // Only the copy and delete actions are offered on an image entry.
+  const labels = await cell.getByRole("button").evaluateAll((els) =>
+    els.map((el) => el.getAttribute("aria-label") ?? el.textContent?.trim() ?? ""),
+  );
+  expect(labels.filter((l) => /Edit|Checkbox|Split|Merge|Raw|Move/.test(l))).toEqual([]);
+  expect(labels.some((l) => /Copy the image/.test(l))).toBe(true);
+  expect(labels.some((l) => /Delete this image/.test(l))).toBe(true);
+});
+
+test("an image entry opens full size and survives a reload", async ({ page }) => {
+  await pasteImage(page);
+  await page.locator("button.thumb").click();
+  await expect(page.locator(".lightbox img")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".lightbox")).toHaveCount(0);
+
+  await page.reload();
+  await ready(page);
+  await expect(page.locator("section.cell.image-cell button.thumb img")).toBeVisible();
+});
+
+test("an image entry exports as a caption, not base64", async ({ page }) => {
+  await pasteImage(page);
+  await addEntry(page, "a text entry");
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("button", { name: /Download every entry/ }).click(),
+  ]);
+  const body = await (await import("node:fs/promises")).readFile(await download.path(), "utf8");
+  expect(body).toContain("*(image pasted");
+  expect(body).not.toContain("data:image/png;base64");
+  expect(body).toContain("a text entry");
+});
+
+test("copy and export buttons show which action ran last", async ({ page }) => {
+  await addEntry(page, "first");
+  await addEntry(page, "second");
+
+  const entryCopy = page.locator("section.cell").first().getByRole("button", { name: /Copy this entry/ });
+  await entryCopy.click();
+  await expect(entryCopy).toHaveAttribute("data-flash", "on");
+
+  const copyAll = page.getByRole("button", { name: /Copy every entry/ });
+  await copyAll.click();
+  await expect(copyAll).toHaveAttribute("data-flash", "on");
+  await expect(entryCopy).not.toHaveAttribute("data-flash", "on");
+
+  const exportAll = page.getByRole("button", { name: /Download every entry/ });
+  await Promise.all([page.waitForEvent("download"), exportAll.click()]);
+  await expect(exportAll).toHaveAttribute("data-flash", "on");
+  await expect(copyAll).not.toHaveAttribute("data-flash", "on");
+});

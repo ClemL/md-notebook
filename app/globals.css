@@ -618,3 +618,72 @@ button.toast-action {
   text-transform: uppercase;
   color: var(--fg-dim);
 }
+
+/* ---------- copy / export feedback ---------- */
+
+button[data-flash="on"] {
+  background: #16351f;
+  border-color: #2f7a48;
+  color: #8ce0a6;
+}
+
+button[data-flash="on"]:hover:not(:disabled) {
+  background: #1c4227;
+  border-color: #3e9a5c;
+}
+
+/* ---------- image entries ---------- */
+
+.image-label {
+  font-size: 11px;
+  color: var(--fg-dim);
+  margin-right: 4px;
+}
+
+.image-cell .cell-body {
+  padding-block: 12px;
+}
+
+button.thumb {
+  display: block;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  overflow: hidden;
+  background: #0c0f14;
+  cursor: zoom-in;
+  max-width: 100%;
+}
+
+button.thumb img {
+  display: block;
+  max-width: 100%;
+  max-height: 260px;
+  width: auto;
+  height: auto;
+}
+
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(6, 8, 11, 0.92);
+  cursor: zoom-out;
+}
+
+.lightbox img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 4px;
+}
+
+.lightbox-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+}

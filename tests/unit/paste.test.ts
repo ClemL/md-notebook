@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { flattenInlineRun, isInlineRun, tidyMarkdown, tightenLinks } from "@/lib/richPaste";
+import {
+  flattenInlineRun,
+  isInlineRun,
+  rewriteAzureDevOpsPath,
+  tidyMarkdown,
+  tightenLinks,
+} from "@/lib/richPaste";
 
 /** Exactly what Turndown produces for an Azure DevOps breadcrumb copied from the browser. */
 const ADO_BREADCRUMB = `/
@@ -83,5 +89,49 @@ describe("isInlineRun guards", () => {
 
   it("accepts a short trail of linked segments", () => {
     expect(isInlineRun(ADO_BREADCRUMB)).toBe(true);
+  });
+});
+
+describe("Azure DevOps file paths", () => {
+  const url =
+    "https://dev.azure.com/inscriptrx/Org/_git/DataDownloader.SFTP?path=/Downloader/StorageAccount.cs&_a=contents&version=GBrelease/10.0.0";
+
+  it("moves the link to the end and drops the project segment", () => {
+    expect(rewriteAzureDevOpsPath(`[StorageAccount.cs](${url})Org > DataDownloader.SFTP`)).toBe(
+      `DataDownloader.SFTP > [StorageAccount.cs](${url})`,
+    );
+  });
+
+  it("keeps deeper folder segments in order", () => {
+    expect(
+      rewriteAzureDevOpsPath(`[StorageAccount.cs](${url})Org > DataDownloader.SFTP > Downloader`),
+    ).toBe(`DataDownloader.SFTP > Downloader > [StorageAccount.cs](${url})`);
+  });
+
+  it("drops the account name and a repeat of the file name", () => {
+    expect(
+      rewriteAzureDevOpsPath(`[StorageAccount.cs](${url})inscriptrx > Org > StorageAccount.cs`),
+    ).toBe(`[StorageAccount.cs](${url})`);
+  });
+
+  it("handles the legacy visualstudio.com host", () => {
+    const legacy = "https://inscriptrx.visualstudio.com/Org/_git/DataDownloader.SFTP?path=/a.cs";
+    expect(rewriteAzureDevOpsPath(`[a.cs](${legacy})Org > DataDownloader.SFTP`)).toBe(
+      `DataDownloader.SFTP > [a.cs](${legacy})`,
+    );
+  });
+
+  it("leaves non-Azure links, plain text and multi-link lines alone", () => {
+    const github = "[README.md](https://github.com/ClemL/md-notebook)ClemL > md-notebook";
+    expect(rewriteAzureDevOpsPath(github)).toBe(github);
+    expect(rewriteAzureDevOpsPath("just some text")).toBe("just some text");
+    const two = `[a](${url})Org > [b](${url})`;
+    expect(rewriteAzureDevOpsPath(two)).toBe(two);
+  });
+
+  it("leaves a bare Azure link with no trail alone", () => {
+    expect(rewriteAzureDevOpsPath(`[StorageAccount.cs](${url})`)).toBe(
+      `[StorageAccount.cs](${url})`,
+    );
   });
 });

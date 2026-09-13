@@ -4,6 +4,8 @@ export type Cell = {
   /** Epoch milliseconds. */
   createdAt: number;
   updatedAt: number;
+  /** Present on an image entry; such an entry holds no markdown of its own. */
+  image?: StoredImage;
 };
 
 export type Backup = {
@@ -12,6 +14,8 @@ export type Backup = {
   exportedAt: string;
   cells: Cell[];
 };
+
+import type { StoredImage } from "./image";
 
 export const STORAGE_KEY = "md-notebook:v2";
 const LEGACY_KEY = "md-notebook:v1";
@@ -25,6 +29,21 @@ export function newId(): string {
 
 export function makeCell(text = "", now = Date.now()): Cell {
   return { id: newId(), text, createdAt: now, updatedAt: now };
+}
+
+export function makeImageCell(image: StoredImage, now = Date.now()): Cell {
+  return { id: newId(), text: "", createdAt: now, updatedAt: now, image };
+}
+
+export function isImageCell(cell: Cell): boolean {
+  return !!cell.image?.dataUrl;
+}
+
+/** What an image entry contributes to an export: a caption, never a megabyte of base64. */
+export function imagePlaceholder(cell: Cell): string {
+  if (!cell.image) return "";
+  const when = formatStamp(cell.image.addedAt);
+  return `*(image pasted ${when} — held in the notebook; use the .json backup to keep it)*`;
 }
 
 /** Prefix every non-empty line with a GFM task item marker, skipping lines that already have one. */
@@ -71,7 +90,9 @@ export function formatStamp(ms: number): string {
 }
 
 export function joinCells(cells: Cell[], separators: boolean): string {
-  const bodies = cells.map((c) => c.text.trim()).filter((t) => t.length > 0);
+  const bodies = cells
+    .map((c) => (isImageCell(c) ? imagePlaceholder(c) : c.text.trim()))
+    .filter((t) => t.length > 0);
   return bodies.join(separators ? "\n\n---\n\n" : "\n\n") + (bodies.length ? "\n" : "");
 }
 
@@ -97,10 +118,19 @@ export function splitMarkdown(md: string, now = Date.now()): Cell[] {
   return chunks.map((c) => makeCell(c.trim(), now)).filter((c) => c.text.length > 0);
 }
 
+export function searchableText(cell: Cell): string {
+  if (isImageCell(cell)) {
+    const img = cell.image!;
+    return `image ${img.name ?? ""} ${formatStamp(img.addedAt)}`;
+  }
+  return cell.text;
+}
+
 export function matchesQuery(cell: Cell, query: string): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
-  return q.split(/\s+/).every((term) => cell.text.toLowerCase().includes(term));
+  const haystack = searchableText(cell).toLowerCase();
+  return q.split(/\s+/).every((term) => haystack.includes(term));
 }
 
 function normalizeCells(input: unknown): Cell[] {
@@ -108,12 +138,26 @@ function normalizeCells(input: unknown): Cell[] {
   const now = Date.now();
   return input
     .filter((c): c is Partial<Cell> => !!c && typeof c === "object" && typeof (c as Cell).text === "string")
-    .map((c) => ({
-      id: typeof c.id === "string" ? c.id : newId(),
-      text: c.text as string,
-      createdAt: typeof c.createdAt === "number" ? c.createdAt : now,
-      updatedAt: typeof c.updatedAt === "number" ? c.updatedAt : now,
-    }));
+    .map((c) => {
+      const cell: Cell = {
+        id: typeof c.id === "string" ? c.id : newId(),
+        text: c.text as string,
+        createdAt: typeof c.createdAt === "number" ? c.createdAt : now,
+        updatedAt: typeof c.updatedAt === "number" ? c.updatedAt : now,
+      };
+      const image = c.image;
+      if (image && typeof image.dataUrl === "string" && image.dataUrl.startsWith("data:image/")) {
+        cell.image = {
+          dataUrl: image.dataUrl,
+          width: Number(image.width) || 0,
+          height: Number(image.height) || 0,
+          bytes: Number(image.bytes) || image.dataUrl.length,
+          addedAt: Number(image.addedAt) || cell.createdAt,
+          name: typeof image.name === "string" ? image.name : undefined,
+        };
+      }
+      return cell;
+    });
 }
 
 export function parseStored(raw: string | null): Cell[] {

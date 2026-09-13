@@ -27,8 +27,21 @@ Everything lives in the browser's `localStorage` — no accounts, no server, no 
   `/ [Boards](url) / [Sprints](url)` on a single line. The rule is deliberately narrow: it needs at
   least one link, short fragments, no block markdown and no sentence punctuation, so pasted prose
   and documents keep their paragraphs.
+- **Azure DevOps file links.** A file copied from a repo arrives as
+  `[StorageAccount.cs](url)Org > DataDownloader.SFTP` — the link first, the location after it, led
+  by the project name. It is rewritten to read as a path: `DataDownloader.SFTP >
+  [StorageAccount.cs](url)`, with the account and project segments dropped. Only applies to a single
+  `dev.azure.com` or `*.visualstudio.com` link followed by a `>` trail.
 - **Duplicate detection.** Pasting a string that already exists verbatim jumps to that entry and
   says so instead of creating a twin; the toast offers *Add anyway*.
+- **Images.** Paste or drop a screenshot anywhere to store it as an image entry: a thumbnail that
+  opens full size on click, with its dimensions, size and paste time in the header. The only actions
+  are **Copy** (back to the clipboard as PNG) and delete. Images are re-encoded as PNG and
+  downscaled until they fit a per-image budget, because the whole notebook shares a few megabytes of
+  `localStorage`. A markdown export writes a dated caption rather than a megabyte of base64 — use
+  the `.json` backup to preserve the pixels.
+- **Copy and export feedback.** The button whose copy or export ran most recently turns green, and
+  reverts when another one is used, so it doubles as a record of what you last copied.
 - **Enter continues lists.** `- alpha` + Enter gives `- `, `* [x] done` gives `* [ ] `, `3. third`
   gives `4. `, and Enter on an empty marker clears it.
 - **Paste a URL over a selection** to wrap it: select `runbook`, paste, get `[runbook](url)`.

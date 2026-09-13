@@ -3,14 +3,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Btn from "./Btn";
 import CellView from "./CellView";
+import { FlashProvider, useFlash } from "./flash";
 import {
   Cell,
   STORAGE_KEY,
   downloadText,
   joinCells,
   loadCells,
+  isImageCell,
   makeBackup,
   makeCell,
+  makeImageCell,
   matchesQuery,
   parseBackup,
   parseStored,
@@ -22,6 +25,7 @@ import {
   writeClipboard,
 } from "@/lib/markdown";
 import { mergeTexts, splitAt } from "@/lib/editor";
+import { copyImage, imageFromTransfer, readClipboardImage, storeImage } from "@/lib/image";
 import { readClipboardSmart } from "@/lib/richPaste";
 import { TEMPLATES } from "@/lib/templates";
 
@@ -37,6 +41,15 @@ const isTypingTarget = (el: EventTarget | null) =>
   (el.tagName === "TEXTAREA" || el.tagName === "INPUT" || el.isContentEditable);
 
 export default function Notebook() {
+  return (
+    <FlashProvider>
+      <NotebookInner />
+    </FlashProvider>
+  );
+}
+
+function NotebookInner() {
+  const { flashed, flash } = useFlash();
   const [cells, setCells] = useState<Cell[]>([]);
   // History lives in refs: a snapshot must be read when the change happens, not when a lazy
   // state updater later runs, or it captures the post-change state. `histVersion` only exists
@@ -225,11 +238,38 @@ export default function Notebook() {
     );
   }, []);
 
+  const addImage = useCallback(
+    async (file: File | Blob, name?: string) => {
+      try {
+        const image = await storeImage(file, name);
+        const cell = makeImageCell(image);
+        mutate((prev) => [...prev, cell]);
+        setSelectedId(cell.id);
+        setEditingId(null);
+        requestAnimationFrame(() =>
+          document.getElementById(`cell-${cell.id}`)?.scrollIntoView({ block: "center" }),
+        );
+        say(`Image stored (${image.width}×${image.height}).`, {
+          label: "Undo",
+          run: () => undoRef.current(),
+        });
+      } catch (err) {
+        say(err instanceof Error ? err.message : "That image could not be stored.");
+      }
+    },
+    [mutate, say],
+  );
+
   const newFromClipboard = useCallback(async () => {
     let text = "";
     let note: string | null = null;
     let rich = false;
     try {
+      const image = await readClipboardImage();
+      if (image) {
+        await addImage(image);
+        return;
+      }
       const payload = await readClipboardSmart(richPaste);
       text = payload.text;
       rich = payload.rich;
@@ -256,7 +296,7 @@ export default function Notebook() {
     if (note) say(note);
     else if (!trimmed) say("Clipboard was empty — new entry is blank.");
     else if (rich) say("Pasted as markdown (converted from rich text).");
-  }, [appendCell, jumpTo, richPaste, say]);
+  }, [addImage, appendCell, jumpTo, richPaste, say]);
 
   const beginEdit = useCallback((id: string) => {
     const cell = cellsRef.current.find((c) => c.id === id);
@@ -398,26 +438,29 @@ export default function Notebook() {
     if (!text.trim()) return say("Nothing to copy.");
     try {
       await writeClipboard(text);
+      flash("copy-all");
       say(`Copied ${visible.length} ${visible.length === 1 ? "entry" : "entries"}${filtering ? " (filtered)" : ""}.`);
     } catch {
       say("Copy failed — the browser blocked clipboard write.");
     }
-  }, [visible, separators, filtering, say]);
+  }, [visible, separators, filtering, flash, say]);
 
   const exportAll = useCallback(() => {
     const text = joinCells(visible, separators);
     if (!text.trim()) return say("Nothing to export.");
     const name = `md-notebook_${timestamp()}.md`;
     downloadText(name, text);
+    flash("export-all");
     say(`Exported ${name}`);
-  }, [visible, separators, say]);
+  }, [visible, separators, flash, say]);
 
   const backup = useCallback(() => {
     if (!cells.length) return say("Nothing to back up.");
     const name = `md-notebook-backup_${timestamp()}.json`;
     downloadText(name, makeBackup(cells), "application/json");
+    flash("backup");
     say(`Saved ${name} (all ${cells.length} entries, timestamps included).`);
-  }, [cells, say]);
+  }, [cells, flash, say]);
 
   const clearAll = useCallback(() => {
     if (!cells.length) return;
@@ -437,6 +480,11 @@ export default function Notebook() {
       if (!list.length) return;
       let added = 0;
       for (const file of list) {
+        if (file.type.startsWith("image/")) {
+          await addImage(file, file.name);
+          added += 1;
+          continue;
+        }
         const body = await file.text();
         if (file.name.toLowerCase().endsWith(".json")) {
           let restored: Cell[];
@@ -462,8 +510,19 @@ export default function Notebook() {
       }
       if (added) say(`Imported ${added} ${added === 1 ? "entry" : "entries"}.`);
     },
-    [apply, say],
+    [addImage, apply, say],
   );
+
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      const file = imageFromTransfer(e.clipboardData);
+      if (!file) return;
+      e.preventDefault();
+      void addImage(file, file.name || undefined);
+    };
+    document.addEventListener("paste", onPaste);
+    return () => document.removeEventListener("paste", onPaste);
+  }, [addImage]);
 
   useEffect(() => {
     const onDragOver = (e: DragEvent) => {
@@ -709,6 +768,7 @@ export default function Notebook() {
           hotkey="Ctrl+Alt+C"
           onClick={copyAll}
           disabled={!visible.length}
+          flash={flashed === "copy-all"}
         >
           Copy{filtering ? ` (${visible.length})` : " All"}
         </Btn>
@@ -717,6 +777,7 @@ export default function Notebook() {
           hotkey="Ctrl+S"
           onClick={exportAll}
           disabled={!visible.length}
+          flash={flashed === "export-all"}
         >
           Export{filtering ? ` (${visible.length})` : " All"}
         </Btn>
@@ -821,12 +882,20 @@ export default function Notebook() {
             onDelete={() => remove(cell.id)}
             onMove={(d) => move(cell.id, d)}
             richPaste={richPaste}
+            flashed={flashed === cell.id}
             onCopy={async () => {
               try {
-                await writeClipboard(cell.text);
-                say("Entry copied.");
-              } catch {
-                say("Copy failed — the browser blocked clipboard write.");
+                if (isImageCell(cell)) {
+                  await copyImage(cell.image!);
+                  flash(cell.id);
+                  say("Image copied to the clipboard.");
+                } else {
+                  await writeClipboard(cell.text);
+                  flash(cell.id);
+                  say("Entry copied.");
+                }
+              } catch (err) {
+                say(err instanceof Error ? err.message : "Copy failed.");
               }
             }}
           />
