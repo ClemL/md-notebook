@@ -1,4 +1,6 @@
-/** One-click skeletons for the note shapes that recur: meeting summaries, decisions, snippets. */
+import { blankTable } from "./table";
+
+/** One-click skeletons for the note shapes that recur: meeting summaries, tables, snippets. */
 
 export type Template = {
   id: string;
@@ -36,6 +38,16 @@ export const TEMPLATES: Template[] = [
     id: "scratch",
     label: "Daily scratch",
     build: (now = new Date()) => [`## ${isoDate(now)}`, "", "* [ ] ", ""].join("\n"),
+  },
+  {
+    id: "table2",
+    label: "Table 2×2",
+    build: () => blankTable(2, 2),
+  },
+  {
+    id: "table3",
+    label: "Table 3×3",
+    build: () => blankTable(3, 3),
   },
   {
     id: "snippet",

@@ -56,7 +56,12 @@ Everything lives in the browser's `localStorage` — no accounts, no server, no 
 - **Timestamps** on every entry, and long entries are clamped with *Show more* so one big paste does
   not bury the rest.
 - **Templates** in the ⋯ menu: meeting summary (dated, with Decisions and Todos sections), daily
-  scratch, code snippet, link list.
+  scratch, 2×2 and 3×3 table skeletons, code snippet, link list.
+- **Tabular paste becomes a table.** Markdown tables render on their own; what does not is text that
+  only looks tabular. A tab-separated grid (Excel, a query result) is converted to a markdown table
+  on paste, and pipe rows written without the `| --- |` delimiter row GFM requires have it inserted.
+- **Image entries are never merged.** Merging is offered only between two text entries, so an image
+  cannot be silently discarded into an entry's markdown.
 - Per-entry **Copy**, reorder, and delete.
 
 ### Notebook
@@ -72,6 +77,8 @@ Everything lives in the browser's `localStorage` — no accounts, no server, no 
   entries; drop a `.json` backup to restore or append it.
 - **`---` separators toggle** controls whether exported entries are joined with a horizontal rule or
   just a blank line.
+- **New entries go to the top** (⋯ menu) puts new, pasted, templated and imported entries above the
+  existing ones instead of below. `a` and `b` still insert relative to the selected entry.
 - **Multi-tab safe.** A second tab's writes are adopted rather than overwritten, and an entry open
   for editing in this tab is preserved through the merge.
 - **Storage warning.** If `localStorage` is full or blocked, a banner says entries are memory-only

@@ -7,6 +7,7 @@ import ImageCell from "./ImageCell";
 import { Cell, formatStamp, isImageCell } from "@/lib/markdown";
 import { continueListOnEnter, insertAt, isUrl, wrapSelectionAsLink } from "@/lib/editor";
 import { htmlIsWorthConverting, htmlToMarkdown } from "@/lib/richPaste";
+import { maybeTable } from "@/lib/table";
 
 const COLLAPSE_PX = 420;
 
@@ -154,6 +155,17 @@ export default function CellView({
       e.preventDefault();
       applyEdit(el, wrapSelectionAsLink(el.value, start, end, plain));
       return;
+    }
+
+    // Tabular text — an Excel grid, a query result, pipe rows missing their delimiter row —
+    // becomes a real markdown table, which is what makes it render as one.
+    if (!html || !htmlIsWorthConverting(html, plain)) {
+      const table = maybeTable(plain);
+      if (table) {
+        e.preventDefault();
+        applyEdit(el, insertAt(el.value, start, end, table));
+        return;
+      }
     }
 
     // Rich paste: replace an HTML clipboard flavor with its markdown equivalent.

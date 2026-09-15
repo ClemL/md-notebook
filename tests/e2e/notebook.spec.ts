@@ -552,3 +552,85 @@ test("a pipeline breadcrumb with long URLs pastes as one line", async ({ page })
   await expect(page.locator(".md p")).toHaveCount(1);
   await expect(page.locator(".md a")).toHaveCount(2);
 });
+
+test("new entries can be inserted at the top", async ({ page }) => {
+  await addEntry(page, "first entry");
+
+  await page.getByRole("button", { name: "More actions" }).click();
+  await page.getByText("New entries go to the top").click();
+  await page.keyboard.press("Escape");
+
+  await page.getByRole("button", { name: /New empty entry/ }).click();
+  await page.locator("textarea.editor").fill("newest entry");
+  await page.locator("textarea.editor").press("Escape");
+
+  await expect(page.locator("section.cell").first()).toContainText("newest entry");
+  await expect(page.locator("section.cell").last()).toContainText("first entry");
+
+  // The choice survives a reload.
+  await page.reload();
+  await ready(page);
+  await page.getByRole("button", { name: /New empty entry/ }).click();
+  await page.locator("textarea.editor").fill("newer still");
+  await page.locator("textarea.editor").press("Escape");
+  await expect(page.locator("section.cell").first()).toContainText("newer still");
+});
+
+test("an image entry cannot be merged away", async ({ page }) => {
+  await addEntry(page, "text above the image");
+  await pasteImage(page);
+  await expect(page.locator("section.cell")).toHaveCount(2);
+
+  // The text entry above an image offers no merge button at all.
+  await expect(
+    page.locator("section.cell").first().getByRole("button", { name: /Merge this entry/ }),
+  ).toHaveCount(0);
+
+  // Nor does the keyboard path swallow it.
+  await page.locator("section.cell").first().click({ position: { x: 5, y: 5 } });
+  await page.keyboard.press("Shift+M");
+  await expect(page.locator(".toast")).toContainText("Image entries cannot be merged");
+  await expect(page.locator("section.cell")).toHaveCount(2);
+  await expect(page.locator("section.cell.image-cell button.thumb img")).toBeVisible();
+});
+
+test("tab-separated paste renders as a table", async ({ page }) => {
+  await page.getByRole("button", { name: /New empty entry/ }).click();
+  const ta = page.locator("textarea.editor");
+  await ta.evaluate((el) => {
+    const dt = new DataTransfer();
+    dt.setData("text/plain", "Vendor\tFeed\tOwner\nPharmaForce\tdaily\tSrini\nOptum\tweekly\tTeja");
+    el.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+  });
+  await expect(ta).toHaveValue(/^\| Vendor \| Feed \| Owner \|/);
+
+  await ta.press("Escape");
+  await expect(page.locator(".md table")).toHaveCount(1);
+  await expect(page.locator(".md th")).toHaveCount(3);
+  await expect(page.locator(".md td")).toHaveCount(6);
+});
+
+test("pipe rows missing a delimiter row are repaired on paste", async ({ page }) => {
+  await page.getByRole("button", { name: /New empty entry/ }).click();
+  const ta = page.locator("textarea.editor");
+  await ta.evaluate((el) => {
+    const dt = new DataTransfer();
+    dt.setData("text/plain", "| Vendor | Feed |\n| Optum | weekly |");
+    el.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+  });
+  await ta.press("Escape");
+  await expect(page.locator(".md table")).toHaveCount(1);
+  await expect(page.locator(".md td")).toHaveCount(2);
+});
+
+test("table templates insert a rendering skeleton", async ({ page }) => {
+  await page.getByRole("button", { name: "More actions" }).click();
+  await page.getByRole("button", { name: "Table 3×3" }).click();
+  const ta = page.locator("textarea.editor");
+  await expect(ta).toHaveValue(/\| Column A \| Column B \| Column C \|/);
+  await ta.press("Escape");
+
+  await expect(page.locator(".md table")).toHaveCount(1);
+  await expect(page.locator(".md th")).toHaveCount(3);
+  await expect(page.locator(".md tbody tr")).toHaveCount(3);
+});

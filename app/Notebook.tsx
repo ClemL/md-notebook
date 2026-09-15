@@ -26,11 +26,13 @@ import {
 } from "@/lib/markdown";
 import { mergeTexts, splitAt } from "@/lib/editor";
 import { copyImage, imageFromTransfer, readClipboardImage, storeImage } from "@/lib/image";
+import { maybeTable } from "@/lib/table";
 import { readClipboardSmart } from "@/lib/richPaste";
 import { TEMPLATES } from "@/lib/templates";
 
 const SEP_KEY = "md-notebook:separators";
 const RICH_KEY = "md-notebook:richpaste";
+const TOP_KEY = "md-notebook:inserttop";
 const HISTORY_LIMIT = 30;
 
 type ToastAction = { label: string; run: () => void };
@@ -60,6 +62,7 @@ function NotebookInner() {
   const [query, setQuery] = useState("");
   const [separators, setSeparators] = useState(true);
   const [richPaste, setRichPaste] = useState(true);
+  const [insertTop, setInsertTop] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [storageOk, setStorageOk] = useState(true);
   const [dragging, setDragging] = useState(false);
@@ -78,9 +81,11 @@ function NotebookInner() {
   const fileRef = useRef<HTMLInputElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const undoRef = useRef<() => void>(() => {});
+  const insertTopRef = useRef(false);
 
   cellsRef.current = cells;
   editingIdRef.current = editingId;
+  insertTopRef.current = insertTop;
 
   // A toast may carry one action, used to offer Undo after a delete or to jump to a duplicate.
   const say = useCallback((message: string, action?: ToastAction) => {
@@ -148,6 +153,7 @@ function NotebookInner() {
     setCells(loadCells());
     setSeparators(localStorage.getItem(SEP_KEY) !== "0");
     setRichPaste(localStorage.getItem(RICH_KEY) !== "0");
+    setInsertTop(localStorage.getItem(TOP_KEY) === "1");
     setLoaded(true);
   }, []);
 
@@ -167,6 +173,10 @@ function NotebookInner() {
   useEffect(() => {
     if (loaded) localStorage.setItem(RICH_KEY, richPaste ? "1" : "0");
   }, [richPaste, loaded]);
+
+  useEffect(() => {
+    if (loaded) localStorage.setItem(TOP_KEY, insertTop ? "1" : "0");
+  }, [insertTop, loaded]);
 
   // Another tab wrote the notebook: adopt its state instead of overwriting it on our next save.
   // An entry being edited here is preserved, so a background tab cannot discard in-progress text.
@@ -198,13 +208,18 @@ function NotebookInner() {
 
   /* ------------------------------------------------------------- mutators */
 
+  /** Where new entries land: below everything, or above it when the option is on. */
+  const place = useCallback((prev: Cell[], incoming: Cell[]) => {
+    return insertTopRef.current ? [...incoming, ...prev] : [...prev, ...incoming];
+  }, []);
+
   const appendCell = useCallback(
     (text: string, after?: string) => {
       const cell = makeCell(text);
       mutate((prev) => {
-        if (!after) return [...prev, cell];
+        if (!after) return place(prev, [cell]);
         const i = prev.findIndex((c) => c.id === after);
-        if (i < 0) return [...prev, cell];
+        if (i < 0) return place(prev, [cell]);
         return [...prev.slice(0, i + 1), cell, ...prev.slice(i + 1)];
       });
       setSelectedId(cell.id);
@@ -212,7 +227,7 @@ function NotebookInner() {
       editSnapshotRef.current = null;
       return cell.id;
     },
-    [mutate],
+    [mutate, place],
   );
 
   const insertBefore = useCallback(
@@ -243,7 +258,7 @@ function NotebookInner() {
       try {
         const image = await storeImage(file, name);
         const cell = makeImageCell(image);
-        mutate((prev) => [...prev, cell]);
+        mutate((prev) => place(prev, [cell]));
         setSelectedId(cell.id);
         setEditingId(null);
         requestAnimationFrame(() =>
@@ -257,7 +272,7 @@ function NotebookInner() {
         say(err instanceof Error ? err.message : "That image could not be stored.");
       }
     },
-    [mutate, say],
+    [mutate, place, say],
   );
 
   const newFromClipboard = useCallback(async () => {
@@ -273,6 +288,13 @@ function NotebookInner() {
       const payload = await readClipboardSmart(richPaste);
       text = payload.text;
       rich = payload.rich;
+      if (!rich) {
+        const table = maybeTable(text);
+        if (table) {
+          text = table;
+          rich = true;
+        }
+      }
     } catch {
       note = "Clipboard read was blocked — press Ctrl+V to paste into the new entry.";
     }
@@ -295,7 +317,7 @@ function NotebookInner() {
     appendCell(text);
     if (note) say(note);
     else if (!trimmed) say("Clipboard was empty — new entry is blank.");
-    else if (rich) say("Pasted as markdown (converted from rich text).");
+    else if (rich) say("Pasted as markdown (converted from rich content).");
   }, [addImage, appendCell, jumpTo, richPaste, say]);
 
   const beginEdit = useCallback((id: string) => {
@@ -364,6 +386,10 @@ function NotebookInner() {
       const i = cellsRef.current.findIndex((c) => c.id === id);
       if (i < 0 || i === cellsRef.current.length - 1) return;
       const next = cellsRef.current[i + 1];
+      // An image entry holds no markdown, so merging one would silently discard the image.
+      if (isImageCell(cellsRef.current[i]) || isImageCell(next)) {
+        return say("Image entries cannot be merged.");
+      }
       const merged = mergeTexts(cellsRef.current[i].text, next.text);
       mutate((prev) =>
         prev
@@ -499,18 +525,18 @@ function NotebookInner() {
             window.confirm(
               `Replace the ${cellsRef.current.length} current entries with ${restored.length} from ${file.name}?\n\nCancel appends them instead. Either way Ctrl+Z undoes it.`,
             );
-          apply(replace ? restored : [...cellsRef.current, ...restored]);
+          apply(replace ? restored : place(cellsRef.current, restored));
           added += restored.length;
         } else {
           const parts = splitMarkdown(body);
           if (!parts.length) continue;
-          apply([...cellsRef.current, ...parts]);
+          apply(place(cellsRef.current, parts));
           added += parts.length;
         }
       }
       if (added) say(`Imported ${added} ${added === 1 ? "entry" : "entries"}.`);
     },
-    [addImage, apply, say],
+    [addImage, apply, place, say],
   );
 
   useEffect(() => {
@@ -814,6 +840,10 @@ function NotebookInner() {
                 <input type="checkbox" checked={richPaste} onChange={(e) => setRichPaste(e.target.checked)} />
                 <span>Convert rich paste to markdown</span>
               </label>
+              <label>
+                <input type="checkbox" checked={insertTop} onChange={(e) => setInsertTop(e.target.checked)} />
+                <span>New entries go to the top</span>
+              </label>
               <hr />
               <button className="danger" onClick={() => { clearAll(); setMenuOpen(false); }}>
                 Delete all entries
@@ -869,7 +899,11 @@ function NotebookInner() {
             editing={editingId === cell.id}
             selected={selectedId === cell.id}
             raw={!!rawIds[cell.id]}
-            canMerge={cells.indexOf(cell) < cells.length - 1}
+            canMerge={(() => {
+              const at = cells.indexOf(cell);
+              const next = cells[at + 1];
+              return !!next && !isImageCell(cell) && !isImageCell(next);
+            })()}
             onSelect={() => setSelectedId(cell.id)}
             onToggleRaw={() => setRawIds((prev) => ({ ...prev, [cell.id]: !prev[cell.id] }))}
             onSplit={(caret) => splitCell(cell.id, caret)}
