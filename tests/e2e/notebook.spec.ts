@@ -526,3 +526,29 @@ test("copy and export buttons show which action ran last", async ({ page }) => {
   await expect(exportAll).toHaveAttribute("data-flash", "on");
   await expect(copyAll).not.toHaveAttribute("data-flash", "on");
 });
+
+test("a pipeline breadcrumb with long URLs pastes as one line", async ({ page }) => {
+  const scope = "https://dev.azure.com/inscriptrx/Org/_build?definitionScope=%5CBackend%5CTSGen";
+  const summary = "https://dev.azure.com/inscriptrx/Org/_build?definitionId=165&_a=summary";
+  await page.getByRole("button", { name: /New empty entry/ }).click();
+  const ta = page.locator("textarea.editor");
+  await ta.evaluate(
+    (el, urls) => {
+      const dt = new DataTransfer();
+      dt.setData(
+        "text/html",
+        `<div><div><a href="${urls.scope}"><div>TSGen</div></a></div>` +
+          `<div>/</div>` +
+          `<div><a href="${urls.summary}"><div>Model.CQE.Landing.Org</div></a></div></div>`,
+      );
+      dt.setData("text/plain", "TSGen\n/\nModel.CQE.Landing.Org");
+      el.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+    },
+    { scope, summary },
+  );
+  await expect(ta).toHaveValue(`[TSGen](${scope}) / [Model.CQE.Landing.Org](${summary})`);
+
+  await ta.press("Escape");
+  await expect(page.locator(".md p")).toHaveCount(1);
+  await expect(page.locator(".md a")).toHaveCount(2);
+});

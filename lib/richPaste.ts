@@ -93,6 +93,20 @@ const BLOCK_LINE = /^(?:#{1,6}\s|>\s|```|~~~|\||\s{4}|(?:[-*+]|\d+[.)])\s)/;
  * because the source wrapped each fragment in a block element — a breadcrumb or link trail.
  * Deliberately narrow: several short fragments, at least one link, and nothing that reads as prose.
  */
+/**
+ * The part of a line a reader sees: link labels without their targets, and a bare URL counted as
+ * one word. Fragment length has to be judged on this, since a breadcrumb segment of five visible
+ * characters can carry an eighty-character Azure DevOps URL behind it.
+ */
+export function visibleLine(line: string): string {
+  return line
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/<(?:https?:\/\/|mailto:)[^>]*>/gi, "url")
+    .replace(/(?:https?:\/\/|mailto:)\S+/gi, "url")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function isInlineRun(md: string): boolean {
   const lines = md
     .split("\n")
@@ -105,11 +119,13 @@ export function isInlineRun(md: string): boolean {
   for (const line of lines) {
     if (SEPARATOR_LINE.test(line)) continue;
     if (BLOCK_LINE.test(line)) return false;
-    if (line.length > 80) return false;
-    const count = line.split(/\s+/).length;
+
+    const visible = visibleLine(line);
+    if (visible.length > 80) return false;
+    const count = visible ? visible.split(" ").length : 0;
     words += count;
     // Sentence punctuation on a multi-word fragment means prose, not a breadcrumb segment.
-    if (count > 3 && /[.!?:;]$/.test(line.replace(/\)$/, ""))) return false;
+    if (count > 3 && /[.!?:;]$/.test(visible)) return false;
   }
   return words <= 80;
 }

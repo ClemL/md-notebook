@@ -5,6 +5,7 @@ import {
   rewriteAzureDevOpsPath,
   tidyMarkdown,
   tightenLinks,
+  visibleLine,
 } from "@/lib/richPaste";
 
 /** Exactly what Turndown produces for an Azure DevOps breadcrumb copied from the browser. */
@@ -133,5 +134,29 @@ describe("Azure DevOps file paths", () => {
     expect(rewriteAzureDevOpsPath(`[StorageAccount.cs](${url})`)).toBe(
       `[StorageAccount.cs](${url})`,
     );
+  });
+});
+
+describe("pipeline breadcrumbs with long URLs", () => {
+  const scope = "https://dev.azure.com/inscriptrx/Org/_build?definitionScope=%5CBackend%5CTSGen";
+  const summary = "https://dev.azure.com/inscriptrx/Org/_build?definitionId=165&_a=summary";
+  const pasted = `[TSGen](${scope})\n\n/\n\n[Model.CQE.Landing.Org](${summary})`;
+
+  it("flattens segments whose links are longer than the fragment guard", () => {
+    expect(flattenInlineRun(pasted)).toBe(
+      `[TSGen](${scope}) / [Model.CQE.Landing.Org](${summary})`,
+    );
+  });
+
+  it("measures the visible text, not the markdown", () => {
+    expect(visibleLine(`[TSGen](${scope})`)).toBe("TSGen");
+    expect(visibleLine("see https://dev.azure.com/inscriptrx/Org/_build?x=1 now")).toBe(
+      "see url now",
+    );
+  });
+
+  it("still rejects prose whose sentences are long", () => {
+    const prose = `The nightly build for [TSGen](${scope}) failed again last night.\n\nRetry it from the summary page.`;
+    expect(isInlineRun(prose)).toBe(false);
   });
 });
