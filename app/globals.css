@@ -469,6 +469,48 @@ kbd {
   font-size: 11px;
 }
 
+/* ---------- receive bar ---------- */
+
+.receive {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid var(--border-strong);
+  background: var(--panel-2);
+  border-radius: 5px;
+  padding: 9px 12px;
+  font-size: 12px;
+  margin-bottom: 12px;
+}
+
+.receive label {
+  color: var(--fg-dim);
+}
+
+.receive input {
+  width: 13ch;
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fg);
+  background: #0c0f14;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  padding: 5px 8px;
+  outline: none;
+}
+
+.receive input:focus {
+  border-color: #4a6b8a;
+}
+
+.receive-note {
+  color: var(--fg-dim);
+  font-size: 11px;
+}
+
 /* ---------- banners, drop zone ---------- */
 
 .banner {

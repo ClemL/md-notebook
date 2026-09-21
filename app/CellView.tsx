@@ -28,6 +28,7 @@ type Props = {
   onCheckbox: () => void;
   onToggleTask: (line: number) => void;
   onCopy: () => void;
+  onSend: () => void;
   onDelete: () => void;
   onMove: (delta: -1 | 1) => void;
   onToggleRaw: () => void;
@@ -35,6 +36,10 @@ type Props = {
   onMerge: () => void;
   /** True while this entry is the most recent copy target. */
   flashed: boolean;
+  /** True while this entry is the most recent Send target. */
+  sendFlashed: boolean;
+  /** True while this entry's Send request is in flight. */
+  sending: boolean;
 };
 
 export default function CellView({
@@ -54,12 +59,15 @@ export default function CellView({
   onCheckbox,
   onToggleTask,
   onCopy,
+  onSend,
   onDelete,
   onMove,
   onToggleRaw,
   onSplit,
   onMerge,
   flashed,
+  sendFlashed,
+  sending,
 }: Props) {
   const ref = useRef<HTMLTextAreaElement | null>(null);
   const bodyRef = useRef<HTMLDivElement | null>(null);
@@ -233,6 +241,16 @@ export default function CellView({
           onClick={onCopy}
         >
           Copy
+        </Btn>
+        <Btn
+          tip="Send this entry to another machine — returns a one-time code"
+          hotkey="s"
+          flash={sendFlashed}
+          disabled={sending}
+          onMouseDown={keepFocus}
+          onClick={onSend}
+        >
+          {sending ? "Sending…" : "Send"}
         </Btn>
         {editing ? (
           <Btn
