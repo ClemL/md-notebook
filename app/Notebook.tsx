@@ -27,13 +27,15 @@ import {
 import { mergeTexts, splitAt } from "@/lib/editor";
 import { copyImage, imageFromTransfer, readClipboardImage, storeImage } from "@/lib/image";
 import { maybeTable } from "@/lib/table";
-import { readClipboardSmart } from "@/lib/richPaste";
+import { readClipboardSmart, rewriteAzureDevOpsUrl } from "@/lib/richPaste";
 import { receiveCode, sendEntries } from "@/lib/transferClient";
 import { TEMPLATES } from "@/lib/templates";
 
 const SEP_KEY = "md-notebook:separators";
 const RICH_KEY = "md-notebook:richpaste";
 const TOP_KEY = "md-notebook:inserttop";
+const COMPACT_KEY = "md-notebook:compact";
+const HINT_KEY = "md-notebook:hint";
 const HISTORY_LIMIT = 30;
 
 type ToastAction = { label: string; run: () => void };
@@ -64,6 +66,8 @@ function NotebookInner() {
   const [separators, setSeparators] = useState(true);
   const [richPaste, setRichPaste] = useState(true);
   const [insertTop, setInsertTop] = useState(false);
+  const [compact, setCompact] = useState(false);
+  const [showHint, setShowHint] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
   const [storageOk, setStorageOk] = useState(true);
   const [dragging, setDragging] = useState(false);
@@ -164,6 +168,8 @@ function NotebookInner() {
     setSeparators(localStorage.getItem(SEP_KEY) !== "0");
     setRichPaste(localStorage.getItem(RICH_KEY) !== "0");
     setInsertTop(localStorage.getItem(TOP_KEY) === "1");
+    setCompact(localStorage.getItem(COMPACT_KEY) === "1");
+    setShowHint(localStorage.getItem(HINT_KEY) !== "0");
     setLoaded(true);
   }, []);
 
@@ -187,6 +193,14 @@ function NotebookInner() {
   useEffect(() => {
     if (loaded) localStorage.setItem(TOP_KEY, insertTop ? "1" : "0");
   }, [insertTop, loaded]);
+
+  useEffect(() => {
+    if (loaded) localStorage.setItem(COMPACT_KEY, compact ? "1" : "0");
+  }, [compact, loaded]);
+
+  useEffect(() => {
+    if (loaded) localStorage.setItem(HINT_KEY, showHint ? "1" : "0");
+  }, [showHint, loaded]);
 
   // Another tab wrote the notebook: adopt its state instead of overwriting it on our next save.
   // An entry being edited here is preserved, so a background tab cannot discard in-progress text.
@@ -299,10 +313,17 @@ function NotebookInner() {
       text = payload.text;
       rich = payload.rich;
       if (!rich) {
-        const table = maybeTable(text);
-        if (table) {
-          text = table;
-          rich = true;
+        // A bare Azure DevOps URL reads better as a link naming what it points at; anything else
+        // that only looks tabular becomes a real table.
+        const link = rewriteAzureDevOpsUrl(text);
+        if (link) {
+          text = link;
+        } else {
+          const table = maybeTable(text);
+          if (table) {
+            text = table;
+            rich = true;
+          }
         }
       }
     } catch {
@@ -853,7 +874,7 @@ function NotebookInner() {
 
   return (
     // data-ready flips once client state is restored; tests wait on it instead of racing hydration.
-    <div className="app" data-ready={loaded ? "true" : undefined}>
+    <div className={`app${compact ? " compact" : ""}`} data-ready={loaded ? "true" : undefined}>
       <header className="bar">
         <span className="title">md-notebook</span>
 
@@ -953,6 +974,14 @@ function NotebookInner() {
                 <input type="checkbox" checked={insertTop} onChange={(e) => setInsertTop(e.target.checked)} />
                 <span>New entries go to the top</span>
               </label>
+              <label>
+                <input type="checkbox" checked={compact} onChange={(e) => setCompact(e.target.checked)} />
+                <span>Extra compact (use the full window width)</span>
+              </label>
+              <label>
+                <input type="checkbox" checked={showHint} onChange={(e) => setShowHint(e.target.checked)} />
+                <span>Show keyboard hint</span>
+              </label>
               <hr />
               <button className="danger" onClick={() => { clearAll(); setMenuOpen(false); }}>
                 Delete all entries
@@ -1020,13 +1049,15 @@ function NotebookInner() {
         </div>
       )}
 
-      <p className="hint">
-        Entries render on blur. <kbd>Esc</kbd>/<kbd>Ctrl+Enter</kbd> commits · <kbd>j</kbd>
-        <kbd>k</kbd> move · <kbd>Enter</kbd> edit · <kbd>a</kbd>/<kbd>b</kbd> insert ·{" "}
-        <kbd>dd</kbd> delete · <kbd>r</kbd> raw · <kbd>Shift+M</kbd> merge ·{" "}
-        <kbd>Ctrl+Shift+-</kbd> split · <kbd>/</kbd> search · <kbd>s</kbd> send ·{" "}
-        <kbd>g</kbd> receive. Stored in this browser only.
-      </p>
+      {showHint && (
+        <p className="hint">
+          Entries render on blur. <kbd>Esc</kbd>/<kbd>Ctrl+Enter</kbd> commits · <kbd>j</kbd>
+          <kbd>k</kbd> move · <kbd>Enter</kbd> edit · <kbd>a</kbd>/<kbd>b</kbd> insert ·{" "}
+          <kbd>dd</kbd> delete · <kbd>r</kbd> raw · <kbd>Shift+M</kbd> merge ·{" "}
+          <kbd>Ctrl+Shift+-</kbd> split · <kbd>/</kbd> search · <kbd>s</kbd> send ·{" "}
+          <kbd>g</kbd> receive. Stored in this browser only.
+        </p>
+      )}
 
       {!loaded ? null : cells.length === 0 ? (
         <div className="empty-state">

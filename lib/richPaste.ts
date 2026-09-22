@@ -200,6 +200,118 @@ export function rewriteAzureDevOpsPath(md: string): string {
   return segments.length ? `${segments.join(" > ")} > ${link}` : link;
 }
 
+/**
+ * A pasted string that is nothing but one URL. Azure DevOps puts branch names and file paths in
+ * the query string, so internal "/" is expected; whitespace anywhere means this is prose that
+ * merely contains a link, which these rules deliberately leave alone.
+ */
+function soleUrl(text: string): URL | null {
+  const trimmed = text.trim();
+  if (!trimmed || /\s/.test(trimmed)) return null;
+  try {
+    const url = new URL(trimmed);
+    return url.protocol === "https:" || url.protocol === "http:" ? url : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Reads one query parameter by name, so parameter order does not matter.
+ *
+ * `URLSearchParams` is not used: it applies the form-encoding rule where "+" means a space, which
+ * corrupts a file path or branch name that legitimately contains one.
+ */
+function rawParam(url: URL, name: string): string | null {
+  for (const pair of url.search.replace(/^\?/, "").split("&")) {
+    if (!pair) continue;
+    const eq = pair.indexOf("=");
+    if ((eq < 0 ? pair : pair.slice(0, eq)) !== name) continue;
+    const value = eq < 0 ? "" : pair.slice(eq + 1);
+    try {
+      return decodeURIComponent(value);
+    } catch {
+      return value;
+    }
+  }
+  return null;
+}
+
+function decodeSegment(segment: string): string {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+}
+
+/** Last segment of a `path` query value: "/src/Model.sln" -> "Model.sln". */
+function basename(path: string): string {
+  const parts = path.split("/").filter(Boolean);
+  return parts.length ? parts[parts.length - 1] : "";
+}
+
+/**
+ * The label an Azure DevOps URL should read as, or null when it is not one of the four shapes
+ * this understands. Narrow by design: anything unrecognized keeps the bare URL it came as.
+ *
+ *   D  /{org}/{project}/_git/{repo}/pullrequest/{n}   -> "{repo} PR !{n}"
+ *   C  /{org}/{project}/_git/{repo}?version=GB{branch}&path=/{file}  -> "{branch} / {file}"
+ *   B  /{org}/{project}/_git/{repo}?path=/{file}      -> "{file}"
+ *   A  /{org}/{project}/_wiki/wikis/{wiki}/{id}/{page} -> "{page}"
+ *
+ * `version` values other than a `GB` (git branch) prefix — `GT` tags, `GC` commits — are out of
+ * scope and left unrewritten rather than guessed at.
+ */
+export function azureDevOpsUrlLabel(raw: string): string | null {
+  const url = soleUrl(raw);
+  if (!url || url.hostname.toLowerCase() !== "dev.azure.com") return null;
+
+  const parts = url.pathname.split("/").filter(Boolean);
+  const gitAt = parts.indexOf("_git");
+
+  if (gitAt >= 0) {
+    const repo = parts[gitAt + 1];
+    if (!repo) return null;
+    const rest = parts.slice(gitAt + 2);
+
+    // D — a pull request, checked first: the path segment is unambiguous.
+    if (rest[0] === "pullrequest" && /^\d+$/.test(rest[1] ?? "") && rest.length === 2) {
+      return `${decodeSegment(repo)} PR !${rest[1]}`;
+    }
+    // B and C — a file in a repo, which carries no path segments past the repo name.
+    if (rest.length) return null;
+
+    const path = rawParam(url, "path");
+    if (!path) return null;
+    const file = basename(path);
+    if (!file) return null;
+
+    const version = rawParam(url, "version");
+    if (version === null) return file;
+    if (!version.startsWith("GB")) return null;
+    const branch = version.slice(2);
+    return branch ? `${branch} / ${file}` : file;
+  }
+
+  // A — a wiki page: /{org}/{project}/_wiki/wikis/{wiki}/{pageId}/{pageName}.
+  if (parts[2] === "_wiki" && parts[3] === "wikis" && parts.length === 7 && /^\d+$/.test(parts[5])) {
+    const page = decodeSegment(parts[6]);
+    return page || null;
+  }
+
+  return null;
+}
+
+/**
+ * Turns a pasted bare Azure DevOps URL into a markdown link that reads as what it points at.
+ * Returns null when the paste is not one of the recognized shapes, so the caller leaves it alone.
+ */
+export function rewriteAzureDevOpsUrl(text: string): string | null {
+  const label = azureDevOpsUrlLabel(text);
+  return label ? `[${label}](${text.trim()})` : null;
+}
+
 /** Converts an HTML clipboard flavor to markdown; returns null when conversion is unavailable. */
 export async function htmlToMarkdown(html: string): Promise<string | null> {
   const convert = await getConverter();

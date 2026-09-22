@@ -35,6 +35,21 @@ and a serverless function, and the app runs fine with it unconfigured.
   by the project name. It is rewritten to read as a path: `DataDownloader.SFTP >
   [StorageAccount.cs](url)`, with the account and project segments dropped. Only applies to a single
   `dev.azure.com` or `*.visualstudio.com` link followed by a `>` trail.
+- **Azure DevOps URLs pasted bare.** A `dev.azure.com` URL pasted on its own — from the address
+  bar, where there is no rich clipboard flavor to convert — becomes a link labelled with what it
+  points at. Four shapes are recognized, and the pull-request shape is checked first:
+
+  | Pasted URL | Becomes |
+  | --- | --- |
+  | `…/_git/{repo}/pullrequest/{n}` | `[{repo} PR !{n}](url)` |
+  | `…/_git/{repo}?version=GB{branch}&path=/{file}` | `[{branch} / {file}](url)` |
+  | `…/_git/{repo}?path=/{file}` | `[{file}](url)` |
+  | `…/_wiki/wikis/{wiki}/{id}/{page}` | `[{page}](url)` |
+
+  Branch names and file paths are URL-decoded, so `GBfeature%2F1403` reads as `feature/1403`, and
+  `version` and `path` are read by name rather than position. As narrow as the breadcrumb rule:
+  the paste has to be nothing but the URL, and anything else — a `GT` tag, a `GC` commit, a work
+  item, a bare project URL, a URL sitting inside a sentence — is left exactly as pasted.
 - **Duplicate detection.** Pasting a string that already exists verbatim jumps to that entry and
   says so instead of creating a twin; the toast offers *Add anyway*.
 - **Images.** Paste or drop a screenshot anywhere to store it as an image entry: a thumbnail that
@@ -82,6 +97,10 @@ and a serverless function, and the app runs fine with it unconfigured.
   just a blank line.
 - **New entries go to the top** (⋯ menu) puts new, pasted, templated and imported entries above the
   existing ones instead of below. `a` and `b` still insert relative to the selected entry.
+- **Extra compact** (⋯ menu, off by default) drops the centered 980px column so the notebook runs
+  edge to edge in the window. Only the outer page box changes — entries keep their own padding.
+- **Show keyboard hint** (⋯ menu, on by default) controls the shortcut line under the header. Off
+  removes it from the document rather than hiding it, so it reserves no space.
 - **Send / Receive.** Ad hoc, write-once transfer of an entry between machines, for when the
   notebook on the laptop has something the notebook on the desktop needs. **Send** (`s`, or the
   button in an entry's toolbar) uploads that entry's markdown and copies a 7-character code to the

@@ -79,6 +79,16 @@ a {
   padding-right: 16px;
 }
 
+/*
+ * Extra compact: drop the centered column so the notebook uses the whole window. Only the outer
+ * page box changes — entry padding and the header's own spacing stay as they are.
+ */
+.app.compact {
+  max-width: none;
+  margin: 0;
+  padding: 0 0 48px;
+}
+
 header.bar {
   position: sticky;
   top: 0;
