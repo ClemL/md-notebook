@@ -79,6 +79,11 @@ Everything lives in the browser's `localStorage` — no accounts, no server, no 
   just a blank line.
 - **New entries go to the top** (⋯ menu) puts new, pasted, templated and imported entries above the
   existing ones instead of below. `a` and `b` still insert relative to the selected entry.
+- **Compact mode** (⋯ menu) tightens spacing and type for small screens and long notebooks.
+- **The shortcut hint line** can be dismissed with its ✕ and brought back from the ⋯ menu.
+- **Collapse an entry** with the ▾ button to leave two lines of it visible; the entry keeps a
+  marked edge, a `+n lines` chip, and its collapsed state across reloads. Double-click a collapsed
+  entry to expand it. Image entries collapse to their header.
 - **Multi-tab safe.** A second tab's writes are adopted rather than overwritten, and an entry open
   for editing in this tab is preserved through the merge.
 - **Storage warning.** If `localStorage` is full or blocked, a banner says entries are memory-only
@@ -133,6 +138,36 @@ at hydration. On a machine with a pre-installed Chromium (a sandbox, a locked-do
 
 CI (`.github/workflows/ci.yml`) runs typecheck, unit tests, build, and the end-to-end suite on every
 push and pull request, and uploads the Playwright report when something fails.
+
+## Phones and foldables
+
+The layout is fluid from a 412px cover screen up, and touch devices get their own rules: hover
+tooltips are suppressed (they stick after a tap), the code-block copy button is always visible
+rather than hover-revealed, and controls are at least 38px tall. On a OnePlus Open's cover screen,
+hiding the hint line and enabling compact mode takes the chrome above the first entry from 31% of
+the screen down to 17%; on the inner screen, from 16% to 5%.
+
+## Hosting it yourself
+
+`npm run build:static` writes a self-contained site to `out/` — 1.1 MB of plain files, no Node
+runtime, no server component. Relative asset paths mean it also works opened directly from disk
+over `file://`, so a copy in a OneDrive folder runs offline.
+
+**Azure Storage static website** (HTTPS included, nothing to run):
+
+```powershell
+.\scripts\Deploy-AzureStaticSite.ps1 -StorageAccount 'inscriptrxtools' -ResourceGroup 'rg-internal-tools'
+```
+
+`azure-pipelines.yml` does the same from Azure DevOps: typecheck, unit tests, end-to-end tests,
+static build, then upload to the `$web` container.
+
+**IIS**: copy `out/` to the site folder. Serve it over **HTTPS** — `navigator.clipboard` requires a
+secure context, so on plain `http://hostname` the paste button, every copy button and image paste
+stop working. `http://localhost` is exempt; a real hostname is not.
+
+Browser storage is per-origin, so moving between hosts does not carry the notebook with it. Use
+**Backup as .json** on the old URL and import it on the new one.
 
 ## Deploy to Vercel
 

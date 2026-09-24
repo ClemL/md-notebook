@@ -10,6 +10,8 @@ import { htmlIsWorthConverting, htmlToMarkdown } from "@/lib/richPaste";
 import { maybeTable } from "@/lib/table";
 
 const COLLAPSE_PX = 420;
+/** A collapsed entry shows this many lines of its rendered output and nothing else. */
+const COLLAPSED_LINES = 2;
 
 type Props = {
   cell: Cell;
@@ -19,6 +21,7 @@ type Props = {
   editing: boolean;
   selected: boolean;
   raw: boolean;
+  collapsed: boolean;
   richPaste: boolean;
   canMerge: boolean;
   onSelect: () => void;
@@ -31,6 +34,7 @@ type Props = {
   onDelete: () => void;
   onMove: (delta: -1 | 1) => void;
   onToggleRaw: () => void;
+  onToggleCollapse: () => void;
   onSplit: (caret: number) => void;
   onMerge: () => void;
   /** True while this entry is the most recent copy target. */
@@ -45,6 +49,7 @@ export default function CellView({
   editing,
   selected,
   raw,
+  collapsed,
   richPaste,
   canMerge,
   onSelect,
@@ -57,6 +62,7 @@ export default function CellView({
   onDelete,
   onMove,
   onToggleRaw,
+  onToggleCollapse,
   onSplit,
   onMerge,
   flashed,
@@ -184,7 +190,9 @@ export default function CellView({
     if (editing) e.preventDefault();
   };
 
-  const clamped = !editing && overflowing && !expanded;
+  const clamped = !editing && overflowing && !expanded && !collapsed;
+  const lineCount = cell.text.trim() ? cell.text.trim().split("\n").length : 0;
+  const hiddenLines = Math.max(0, lineCount - COLLAPSED_LINES);
 
   if (isImageCell(cell)) {
     return (
@@ -193,6 +201,8 @@ export default function CellView({
         index={index}
         selected={selected}
         flashed={flashed}
+        collapsed={collapsed}
+        onToggleCollapse={onToggleCollapse}
         onSelect={onSelect}
         onCopy={onCopy}
         onDelete={onDelete}
@@ -203,11 +213,23 @@ export default function CellView({
   return (
     <section
       id={`cell-${cell.id}`}
-      className={`cell${editing ? " editing" : ""}${selected ? " selected" : ""}`}
+      className={`cell${editing ? " editing" : ""}${selected ? " selected" : ""}${
+        collapsed && !editing ? " collapsed" : ""
+      }`}
       onMouseDown={onSelect}
     >
       <div className="cell-head">
         <span className="cell-index">[{index + 1}]</span>
+        {!editing && (
+          <Btn
+            className="collapse-toggle"
+            tip={collapsed ? "Expand this entry" : "Collapse to the first two lines"}
+            onClick={onToggleCollapse}
+            aria-expanded={!collapsed}
+          >
+            {collapsed ? "▸" : "▾"}
+          </Btn>
+        )}
         {editing ? (
           <Btn tip="Render this entry" hotkey="Esc" onMouseDown={keepFocus} onClick={onCommit}>
             Done
@@ -259,6 +281,9 @@ export default function CellView({
           </Btn>
         )}
         <span className="spacer" />
+        {collapsed && hiddenLines > 0 && (
+          <span className="collapsed-chip">+{hiddenLines} lines</span>
+        )}
         <span className="stamp" title={`Created ${formatStamp(cell.createdAt)}`}>
           {formatStamp(cell.updatedAt)}
         </span>
@@ -291,7 +316,11 @@ export default function CellView({
         </Btn>
       </div>
 
-      <div className={`cell-body${clamped ? " clamped" : ""}`} ref={bodyRef}>
+      <div
+        className={`cell-body${clamped ? " clamped" : ""}${collapsed && !editing ? " collapsed" : ""}`}
+        ref={bodyRef}
+        onDoubleClick={collapsed ? onToggleCollapse : undefined}
+      >
         {editing ? (
           <textarea
             ref={ref}

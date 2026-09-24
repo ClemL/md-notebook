@@ -14,6 +14,8 @@ export default function ImageCell({
   index,
   selected,
   flashed,
+  collapsed,
+  onToggleCollapse,
   onSelect,
   onCopy,
   onDelete,
@@ -22,6 +24,8 @@ export default function ImageCell({
   index: number;
   selected: boolean;
   flashed: boolean;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
   onSelect: () => void;
   onCopy: () => void;
   onDelete: () => void;
@@ -44,11 +48,19 @@ export default function ImageCell({
   return (
     <section
       id={`cell-${cell.id}`}
-      className={`cell image-cell${selected ? " selected" : ""}`}
+      className={`cell image-cell${selected ? " selected" : ""}${collapsed ? " collapsed" : ""}`}
       onMouseDown={onSelect}
     >
       <div className="cell-head">
         <span className="cell-index">[{index + 1}]</span>
+        <Btn
+          className="collapse-toggle"
+          tip={collapsed ? "Expand this image" : "Collapse this image"}
+          onClick={onToggleCollapse}
+          aria-expanded={!collapsed}
+        >
+          {collapsed ? "▸" : "▾"}
+        </Btn>
         <span className="image-label">
           image · {image.width}×{image.height} · {formatBytes(image.bytes)}
         </span>
@@ -64,7 +76,7 @@ export default function ImageCell({
         </Btn>
       </div>
 
-      <div className="cell-body">
+      <div className="cell-body" hidden={collapsed}>
         <button className="thumb" onClick={() => setZoomed(true)} title="Click to view full size">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={image.dataUrl} alt={image.name ?? `Pasted image ${formatStamp(image.addedAt)}`} />

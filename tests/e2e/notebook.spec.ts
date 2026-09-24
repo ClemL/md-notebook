@@ -634,3 +634,165 @@ test("table templates insert a rendering skeleton", async ({ page }) => {
   await expect(page.locator(".md th")).toHaveCount(3);
   await expect(page.locator(".md tbody tr")).toHaveCount(3);
 });
+
+test("compact mode is a menu toggle that persists", async ({ page }) => {
+  await addEntry(page, "an entry");
+  const app = page.locator(".app");
+  await expect(app).not.toHaveAttribute("data-compact", "on");
+
+  await page.getByRole("button", { name: "More actions" }).click();
+  await page.getByText("Compact mode").click();
+  await page.keyboard.press("Escape");
+  await expect(app).toHaveAttribute("data-compact", "on");
+
+  // Density actually changes, not just the attribute.
+  const head = page.locator(".cell-head").first();
+  const compactHeight = await head.evaluate((el) => el.getBoundingClientRect().height);
+  await page.reload();
+  await ready(page);
+  await expect(page.locator(".app")).toHaveAttribute("data-compact", "on");
+
+  await page.getByRole("button", { name: "More actions" }).click();
+  await page.getByText("Compact mode").click();
+  await page.keyboard.press("Escape");
+  const normalHeight = await head.evaluate((el) => el.getBoundingClientRect().height);
+  expect(compactHeight).toBeLessThan(normalHeight);
+});
+
+test("the hint line can be dismissed and brought back", async ({ page }) => {
+  await expect(page.locator("p.hint")).toBeVisible();
+  await page.getByRole("button", { name: "Hide the shortcut hints" }).click();
+  await expect(page.locator("p.hint")).toHaveCount(0);
+
+  await page.reload();
+  await ready(page);
+  await expect(page.locator("p.hint")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "More actions" }).click();
+  await page.getByText("Show the shortcut hints").click();
+  await page.keyboard.press("Escape");
+  await expect(page.locator("p.hint")).toBeVisible();
+});
+
+test("an entry collapses to two lines and remembers it", async ({ page }) => {
+  await addEntry(page, "line one\nline two\nline three\nline four\nline five\nline six");
+  const cell = page.locator("section.cell").first();
+  const body = cell.locator(".cell-body");
+  const full = await body.evaluate((el) => el.getBoundingClientRect().height);
+
+  await cell.getByRole("button", { name: /Collapse to the first two lines/ }).click();
+  await expect(cell).toHaveClass(/collapsed/);
+  await expect(cell.locator(".collapsed-chip")).toHaveText("+4 lines");
+  const collapsed = await body.evaluate((el) => el.getBoundingClientRect().height);
+  expect(collapsed).toBeLessThan(full / 2);
+  expect(collapsed).toBeLessThan(60);
+
+  await page.reload();
+  await ready(page);
+  await expect(page.locator("section.cell").first()).toHaveClass(/collapsed/);
+
+  await page.locator("section.cell").first().getByRole("button", { name: /Expand this entry/ }).click();
+  await expect(page.locator("section.cell").first()).not.toHaveClass(/collapsed/);
+  await expect(page.locator(".collapsed-chip")).toHaveCount(0);
+});
+
+test("an image entry collapses away its thumbnail", async ({ page }) => {
+  await pasteImage(page);
+  const cell = page.locator("section.cell.image-cell");
+  await expect(cell.locator("button.thumb img")).toBeVisible();
+
+  await cell.getByRole("button", { name: /Collapse this image/ }).click();
+  await expect(cell).toHaveClass(/collapsed/);
+  await expect(cell.locator("button.thumb img")).toBeHidden();
+  await expect(cell.locator(".image-label")).toBeVisible();
+
+  await cell.getByRole("button", { name: /Expand this image/ }).click();
+  await expect(cell.locator("button.thumb img")).toBeVisible();
+});
+
+test.describe("touch device (foldable, phone)", () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: { width: 412, height: 915 } });
+
+  test("nothing depends on hover and tap targets are big enough", async ({ page }) => {
+    await page.goto("/");
+    await ready(page);
+    await page.evaluate(() => localStorage.clear());
+    await page.reload();
+    await ready(page);
+
+    await page.getByRole("button", { name: /New empty entry/ }).tap();
+    await page.locator("textarea.editor").fill("```sql\nSELECT 1;\n```");
+    await page.locator("textarea.editor").press("Escape");
+
+    // The code copy button is reachable without a hover state.
+    const copy = page.getByRole("button", { name: "Copy code block" });
+    await expect(copy).toHaveCSS("opacity", "1");
+    await copy.tap();
+    await expect(copy).toHaveText("copied");
+
+    // Hover tooltips do not exist on touch, where they would stick after a tap.
+    await expect(page.locator(".tipwrap .tip").first()).toBeHidden();
+
+    // Toolbar buttons clear the small-target threshold.
+    const tiny = await page.locator("header.bar button, .cell-head button").evaluateAll((els) =>
+      els.filter((el) => el.getBoundingClientRect().height < 38).length,
+    );
+    expect(tiny).toBe(0);
+
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(1);
+  });
+
+  test("no toolbar control is clipped off the edge of the screen", async ({ page }) => {
+    await page.goto("/");
+    await ready(page);
+    await page.evaluate(() => localStorage.clear());
+    await page.reload();
+    await ready(page);
+
+    await page.getByRole("button", { name: /New empty entry/ }).tap();
+    await page.locator("textarea.editor").fill("## Heading\nline two\nline three\nline four");
+    await page.locator("textarea.editor").press("Escape");
+    await page.getByRole("button", { name: /New empty entry/ }).tap();
+    await page.locator("textarea.editor").fill("a second entry");
+    await page.locator("textarea.editor").press("Escape");
+    await page.locator("section.cell").first().getByRole("button", { name: /Collapse to/ }).tap();
+
+    // The page does not scroll sideways, so anything past the edge is simply unreachable.
+    const clipped = await page.locator(".cell-head button, .collapsed-chip, header.bar button").evaluateAll(
+      (els, width) =>
+        els
+          .filter((el) => {
+            const r = el.getBoundingClientRect();
+            return r.right > width + 1 || r.left < -1;
+          })
+          .map((el) => (el.getAttribute("aria-label") ?? el.textContent ?? "").trim()),
+      412,
+    );
+    expect(clipped).toEqual([]);
+  });
+
+  test("hiding the hint and going compact frees real estate", async ({ page }) => {
+    await page.goto("/");
+    await ready(page);
+    await page.evaluate(() => localStorage.clear());
+    await page.reload();
+    await ready(page);
+    await page.getByRole("button", { name: /New empty entry/ }).tap();
+    await page.locator("textarea.editor").fill("an entry");
+    await page.locator("textarea.editor").press("Escape");
+
+    const top = () => page.locator("section.cell").first().evaluate((el) => el.getBoundingClientRect().top);
+    const before = await top();
+
+    await page.getByRole("button", { name: "Hide the shortcut hints" }).tap();
+    await page.getByRole("button", { name: "More actions" }).tap();
+    await page.getByText("Compact mode").tap();
+    await page.keyboard.press("Escape");
+
+    const after = await top();
+    expect(after).toBeLessThan(before - 100);
+  });
+});

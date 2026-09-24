@@ -9,7 +9,8 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "build:static": "node scripts/build-static.mjs"
   },
   "dependencies": {
     "@joplin/turndown-plugin-gfm": "^1.0.68",
