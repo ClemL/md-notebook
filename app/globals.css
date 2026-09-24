@@ -420,17 +420,24 @@ kbd {
   display: inline-flex;
 }
 
+/* Positioned against the viewport by Dropdown, so it is clamped to the visible height and
+   scrolls internally instead of running off the bottom of a phone screen. */
 .menu {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 6px);
+  position: fixed;
   z-index: 40;
-  min-width: 260px;
+  min-width: min(260px, calc(100vw - 16px));
+  max-height: 80vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: var(--panel-2);
   border: 1px solid var(--border-strong);
   border-radius: 5px;
   padding: 5px;
   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.5);
+}
+
+.menuwrap-anchor {
+  display: inline-flex;
 }
 
 .menu button,
@@ -955,12 +962,6 @@ button.collapse-toggle {
   .search {
     flex: 1 1 100%;
     min-width: 0;
-  }
-
-  .menu {
-    min-width: 0;
-    width: calc(100vw - 32px);
-    max-width: 320px;
   }
 
   .cell-body {

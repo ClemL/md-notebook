@@ -423,7 +423,7 @@ test("raw view shows the source without opening the editor", async ({ page }) =>
 });
 
 test("templates insert a dated skeleton", async ({ page }) => {
-  await page.getByRole("button", { name: "More actions" }).click();
+  await page.getByRole("button", { name: "Insert a template" }).click();
   await page.getByRole("button", { name: "Meeting summary" }).click();
   const ta = page.locator("textarea.editor");
   const today = new Date();
@@ -624,7 +624,7 @@ test("pipe rows missing a delimiter row are repaired on paste", async ({ page })
 });
 
 test("table templates insert a rendering skeleton", async ({ page }) => {
-  await page.getByRole("button", { name: "More actions" }).click();
+  await page.getByRole("button", { name: "Insert a template" }).click();
   await page.getByRole("button", { name: "Table 3×3" }).click();
   const ta = page.locator("textarea.editor");
   await expect(ta).toHaveValue(/\| Column A \| Column B \| Column C \|/);
@@ -858,4 +858,58 @@ test("Send copies the code and Receive inserts the entries it returns", async ({
   // Received entries are an ordinary import: one undo step.
   await page.keyboard.press("Control+z");
   await expect(page.locator("section.cell")).toHaveCount(1);
+});
+
+test("templates live in their own dropdown, separate from the actions menu", async ({ page }) => {
+  await page.getByRole("button", { name: "Insert a template" }).click();
+  await expect(page.getByRole("button", { name: "Meeting summary" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Table 2×2" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Delete all entries" })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+
+  await page.getByRole("button", { name: "More actions" }).click();
+  await expect(page.getByRole("button", { name: "Backup as .json" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Meeting summary" })).toHaveCount(0);
+
+  // An action closes the menu; an option leaves it open so several can be set at once.
+  await page.getByText("Compact mode").click();
+  await expect(page.getByRole("button", { name: "Backup as .json" })).toBeVisible();
+  await page.getByText("New entries go to the top").click();
+  await expect(page.getByRole("button", { name: "Backup as .json" })).toBeVisible();
+  await page.getByRole("button", { name: "Checkbox All" }).click();
+  await expect(page.getByRole("button", { name: "Backup as .json" })).toHaveCount(0);
+});
+
+test.describe("dropdowns on a short screen", () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: { width: 412, height: 480 } });
+
+  test("every menu stays on screen and scrolls to its last item", async ({ page }) => {
+    await page.goto("/");
+    await ready(page);
+    await page.evaluate(() => localStorage.clear());
+    await page.reload();
+    await ready(page);
+
+    for (const name of ["More actions", "Insert a template"]) {
+      await page.getByRole("button", { name }).tap();
+      const menu = page.locator(".menu");
+      const box = await menu.evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, scrolls: el.scrollHeight > el.clientHeight };
+      });
+      expect(box.left, `${name} runs off the left`).toBeGreaterThanOrEqual(0);
+      expect(box.right, `${name} runs off the right`).toBeLessThanOrEqual(412);
+      expect(box.bottom, `${name} runs off the bottom`).toBeLessThanOrEqual(480);
+
+      // Whatever does not fit must be reachable by scrolling the menu itself, since an
+      // overlay cannot be brought into view by scrolling the page behind it.
+      if (box.scrolls) {
+        await menu.evaluate((el) => el.scrollTo(0, el.scrollHeight));
+        const last = await menu.locator("button").last().evaluate((el) => el.getBoundingClientRect().bottom);
+        expect(last).toBeLessThanOrEqual(480);
+      }
+      await page.keyboard.press("Escape");
+      await expect(menu).toHaveCount(0);
+    }
+  });
 });

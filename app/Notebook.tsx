@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Btn from "./Btn";
 import CellView from "./CellView";
+import Dropdown from "./Dropdown";
 import { FlashProvider, useFlash } from "./flash";
 import {
   Cell,
@@ -70,7 +71,6 @@ function NotebookInner() {
   const [compact, setCompact] = useState(false);
   const [showHint, setShowHint] = useState(true);
   const [collapsedIds, setCollapsedIds] = useState<Record<string, boolean>>({});
-  const [menuOpen, setMenuOpen] = useState(false);
   const [storageOk, setStorageOk] = useState(true);
   const [dragging, setDragging] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -90,7 +90,6 @@ function NotebookInner() {
   const toastTimer = useRef<number | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
-  const menuRef = useRef<HTMLDivElement | null>(null);
   const undoRef = useRef<() => void>(() => {});
   const insertTopRef = useRef(false);
   const selectedIdRef = useRef<string | null>(null);
@@ -870,20 +869,6 @@ function NotebookInner() {
     undo,
   ]);
 
-  useEffect(() => {
-    if (!menuOpen) return;
-    const onDown = (e: MouseEvent) => {
-      if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false);
-    };
-    const onEsc = (e: KeyboardEvent) => e.key === "Escape" && setMenuOpen(false);
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onEsc);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onEsc);
-    };
-  }, [menuOpen]);
-
   /* ----------------------------------------------------------------- view */
 
   return (
@@ -948,61 +933,53 @@ function NotebookInner() {
           Export{filtering ? ` (${visible.length})` : " All"}
         </Btn>
 
-        <div className="menuwrap" ref={menuRef}>
-          <Btn tip="More actions" onClick={() => setMenuOpen((v) => !v)} aria-expanded={menuOpen}>
-            ⋯
-          </Btn>
-          {menuOpen && (
-            <div className="menu" role="menu">
-              <button onClick={() => { checkboxAll(); setMenuOpen(false); }}>
-                Checkbox All <kbd>t</kbd>
-              </button>
-              <hr />
-              <span className="menu-label">Insert template</span>
-              {TEMPLATES.map((t) => (
-                <button key={t.id} onClick={() => { insertTemplate(t.id); setMenuOpen(false); }}>
-                  {t.label}
-                </button>
-              ))}
-              <hr />
-              <button onClick={() => { openReceive(); setMenuOpen(false); }}>
-                Receive a transfer… <kbd>g</kbd>
-              </button>
-              <hr />
-              <button onClick={() => { fileRef.current?.click(); setMenuOpen(false); }}>
-                Import .md / .json…
-              </button>
-              <button onClick={() => { backup(); setMenuOpen(false); }}>Backup as .json</button>
-              <hr />
-              <label>
-                <input type="checkbox" checked={separators} onChange={(e) => setSeparators(e.target.checked)} />
-                <span>
-                  <code>---</code> between entries on export
-                </span>
-              </label>
-              <label>
-                <input type="checkbox" checked={richPaste} onChange={(e) => setRichPaste(e.target.checked)} />
-                <span>Convert rich paste to markdown</span>
-              </label>
-              <label>
-                <input type="checkbox" checked={insertTop} onChange={(e) => setInsertTop(e.target.checked)} />
-                <span>New entries go to the top</span>
-              </label>
-              <label>
-                <input type="checkbox" checked={compact} onChange={(e) => setCompact(e.target.checked)} />
-                <span>Compact mode</span>
-              </label>
-              <label>
-                <input type="checkbox" checked={showHint} onChange={(e) => setShowHint(e.target.checked)} />
-                <span>Show the shortcut hints</span>
-              </label>
-              <hr />
-              <button className="danger" onClick={() => { clearAll(); setMenuOpen(false); }}>
-                Delete all entries
-              </button>
-            </div>
-          )}
-        </div>
+        <Dropdown label="Templates" tip="Insert a template" align="right">
+          <span className="menu-label">Insert template</span>
+          {TEMPLATES.map((t) => (
+            <button key={t.id} onClick={() => insertTemplate(t.id)}>
+              {t.label}
+            </button>
+          ))}
+        </Dropdown>
+
+        <Dropdown label="⋯" tip="More actions" align="right">
+          <button onClick={checkboxAll}>
+            Checkbox All <kbd>t</kbd>
+          </button>
+          <button onClick={openReceive}>
+            Receive a transfer… <kbd>g</kbd>
+          </button>
+          <hr />
+          <button onClick={() => fileRef.current?.click()}>Import .md / .json…</button>
+          <button onClick={backup}>Backup as .json</button>
+          <hr />
+          <label>
+            <input type="checkbox" checked={separators} onChange={(e) => setSeparators(e.target.checked)} />
+            <span>
+              <code>---</code> between entries on export
+            </span>
+          </label>
+          <label>
+            <input type="checkbox" checked={richPaste} onChange={(e) => setRichPaste(e.target.checked)} />
+            <span>Convert rich paste to markdown</span>
+          </label>
+          <label>
+            <input type="checkbox" checked={insertTop} onChange={(e) => setInsertTop(e.target.checked)} />
+            <span>New entries go to the top</span>
+          </label>
+          <label>
+            <input type="checkbox" checked={compact} onChange={(e) => setCompact(e.target.checked)} />
+            <span>Compact mode</span>
+          </label>
+          <label>
+            <input type="checkbox" checked={showHint} onChange={(e) => setShowHint(e.target.checked)} />
+            <span>Show the shortcut hints</span>
+          </label>
+          <hr />
+          <button className="danger" onClick={clearAll}>
+            Delete all entries
+          </button>
+        </Dropdown>
       </header>
 
       <input

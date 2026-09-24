@@ -58,8 +58,8 @@ and a serverless function, and the app runs fine with it unconfigured.
   **Checkbox All** applies it to every entry.
 - **Timestamps** on every entry, and long entries are clamped with *Show more* so one big paste does
   not bury the rest.
-- **Templates** in the ⋯ menu: meeting summary (dated, with Decisions and Todos sections), daily
-  scratch, 2×2 and 3×3 table skeletons, code snippet, link list.
+- **Templates** live in their own dropdown: meeting summary (dated, with Decisions and Todos
+  sections), daily scratch, 2×2 and 3×3 table skeletons, code snippet, link list.
 - **Tabular paste becomes a table.** Markdown tables render on their own; what does not is text that
   only looks tabular. A tab-separated grid (Excel, a query result) is converted to a markdown table
   on paste, and pipe rows written without the `| --- |` delimiter row GFM requires have it inserted.
@@ -160,6 +160,10 @@ tooltips are suppressed (they stick after a tap), the code-block copy button is 
 rather than hover-revealed, and controls are at least 38px tall. On a OnePlus Open's cover screen,
 hiding the hint line and enabling compact mode takes the chrome above the first entry from 31% of
 the screen down to 17%; on the inner screen, from 16% to 5%.
+
+Dropdowns are measured against the visible viewport and clamped to it, so a menu taller than the
+screen scrolls inside itself rather than running past the bottom edge — an overlay cannot be
+brought into view by scrolling the page behind it.
 
 ## Hosting it yourself
 
