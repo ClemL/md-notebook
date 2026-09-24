@@ -4,7 +4,10 @@ A notebook-style markdown scratchpad. Entries behave like `.ipynb` cells, minus 
 type markdown, and the moment the text box loses focus it is replaced by the rendered
 output with an **Edit** button that brings the text box back.
 
-Everything lives in the browser's `localStorage` — no accounts, no server, no network calls.
+Everything lives in the browser's `localStorage` — no accounts, no sign-in, no sync. The one
+exception is **Send/Receive**, an opt-in hand-off that moves an entry to another machine through a
+short-lived key in Upstash Redis; it is the only part of the app that needs environment variables
+and a serverless function, and the app runs fine with it unconfigured.
 
 ## Links
 
@@ -84,6 +87,14 @@ Everything lives in the browser's `localStorage` — no accounts, no server, no 
 - **Collapse an entry** with the ▾ button to leave two lines of it visible; the entry keeps a
   marked edge, a `+n lines` chip, and its collapsed state across reloads. Double-click a collapsed
   entry to expand it. Image entries collapse to their header.
+- **Send / Receive.** Ad hoc, write-once transfer of an entry between machines, for when the
+  notebook on the laptop has something the notebook on the desktop needs. **Send** (`s`, or the
+  button in an entry's toolbar) uploads that entry's markdown and copies a 7-character code to the
+  clipboard. **Receive** (`g`, or the ⋯ menu) takes the code on the other machine and inserts the
+  content as new entries — at the top if that option is on, otherwise below the selected entry,
+  and as one undo step like any import. The read is a Redis `GETDEL`, so a code works exactly
+  once; an unclaimed transfer expires after 24 hours. There is no history, no re-claiming and no
+  account: if nobody receives it, it is gone. Image entries cannot be sent.
 - **Multi-tab safe.** A second tab's writes are adopted rather than overwritten, and an entry open
   for editing in this tab is preserved through the merge.
 - **Storage warning.** If `localStorage` is full or blocked, a banner says entries are memory-only
@@ -107,6 +118,8 @@ Every button's tooltip names its shortcut. Outside a text box the notebook is in
 | `Ctrl+Shift+-` | Split the entry being edited at the caret |
 | `Alt+↑` / `Alt+↓` | Move the entry up / down |
 | `/` or `Ctrl+K` | Search |
+| `s` | Send the selected entry, and copy its transfer code |
+| `g` | Receive a transfer by code |
 | `Ctrl+Shift+V` | New entry from the clipboard |
 | `Ctrl+Shift+Enter` | New empty entry |
 | `Ctrl+Z` / `Ctrl+Shift+Z` | Undo / redo |
@@ -124,6 +137,7 @@ pasted lists of links. Raw HTML is **not** rendered, so pasted content cannot in
 
 ```bash
 npm install
+cp .env.local.example .env.local   # optional: only Send/Receive needs it
 npm run dev        # http://localhost:3000
 npm run build      # production build
 npm run typecheck  # tsc --noEmit
@@ -153,6 +167,9 @@ the screen down to 17%; on the inner screen, from 16% to 5%.
 runtime, no server component. Relative asset paths mean it also works opened directly from disk
 over `file://`, so a copy in a OneDrive folder runs offline.
 
+`npm run build:static` excludes the Send/Receive API routes, which a file host cannot run — the
+static copy says so plainly if you try to send from it. Everything else works, offline included.
+
 **Azure Storage static website** (HTTPS included, nothing to run):
 
 ```powershell
@@ -171,8 +188,32 @@ Browser storage is per-origin, so moving between hosts does not carry the notebo
 
 ## Deploy to Vercel
 
-The app is a static-prerendered Next.js App Router project with no environment variables and no
-server-side state, so it deploys with zero configuration.
+The app is a static-prerendered Next.js App Router project. Send/Receive is the one deviation: it
+needs two environment variables and ships a single serverless function (`/api/transfer`, plus its
+`[code]` child) to keep the Upstash token off the client — every other route is still static, and
+without the variables the app behaves exactly as before, with Send and Receive reporting that
+transfer is not set up.
+
+### Environment variables
+
+| Variable | Where it comes from |
+| --- | --- |
+| `UPSTASH_REDIS_REST_URL` | Upstash console → your database → REST API |
+| `UPSTASH_REDIS_REST_TOKEN` | same page; this is a secret and must not be prefixed `NEXT_PUBLIC_` |
+
+Set both in **Vercel → Project → Settings → Environment Variables** for Production, Preview and
+Development. Locally they go in `.env.local` (gitignored); `.env.local.example` documents them.
+
+### Transfer API
+
+| Route | Does |
+| --- | --- |
+| `POST /api/transfer` | Body `{ entries: string[] }`. Mints a code, writes `transfer:<code>` with `SET … EX 86400 NX`, answers `{ code }`. |
+| `GET /api/transfer/<code>` | `GETDEL transfer:<code>`. Answers `{ entries }`, or 404 `{ error: "not_found" }` when the code expired or was already used. |
+
+Both answer 503 `not_configured` when the environment variables are missing and 502 `upstream`
+when Upstash is unreachable, so the browser can give each failure its own message. The token is
+read only inside the route handlers (`lib/upstash.ts`) and never reaches the client bundle.
 
 The project is already wired up at
 [vercel.com/clem21/md-notebook](https://vercel.com/clem21/md-notebook) and serves from
@@ -184,7 +225,9 @@ To set it up from scratch elsewhere:
 1. Push the branch to GitHub.
 2. In Vercel: **Add New → Project → Import** the repository.
 3. Accept the detected framework (Next.js), build command `next build`, output `.next`.
-4. Deploy.
+4. Add `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`, or skip them and leave
+   Send/Receive switched off.
+5. Deploy.
 
 Or from the CLI:
 
@@ -196,7 +239,8 @@ vercel --prod   # production deployment
 
 ## Storage notes
 
-State is kept under the `md-notebook:v2` key in `localStorage` (a `v1` payload is migrated on first
+Apart from a pending Send — one `transfer:<code>` key in Redis, deleted the moment it is
+received and expiring after 24h regardless — state is kept under the `md-notebook:v2` key in `localStorage` (a `v1` payload is migrated on first
 load), scoped to the deployment's origin —
 it does not sync between browsers or devices. Clearing site data clears the notebook, so use
 **Export All** for anything worth keeping. If storage is full or disabled, the app keeps working

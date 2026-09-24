@@ -28,6 +28,7 @@ import { mergeTexts, splitAt } from "@/lib/editor";
 import { copyImage, imageFromTransfer, readClipboardImage, storeImage } from "@/lib/image";
 import { maybeTable } from "@/lib/table";
 import { readClipboardSmart } from "@/lib/richPaste";
+import { receiveCode, sendEntries } from "@/lib/transferClient";
 import { TEMPLATES } from "@/lib/templates";
 
 const SEP_KEY = "md-notebook:separators";
@@ -75,6 +76,10 @@ function NotebookInner() {
   const [loaded, setLoaded] = useState(false);
   const [rawIds, setRawIds] = useState<Record<string, boolean>>({});
   const [toast, setToast] = useState<Toast | null>(null);
+  const [sendingId, setSendingId] = useState<string | null>(null);
+  const [receiveOpen, setReceiveOpen] = useState(false);
+  const [codeInput, setCodeInput] = useState("");
+  const [receiving, setReceiving] = useState(false);
 
   const cellsRef = useRef<Cell[]>([]);
   const pastRef = useRef<Cell[][]>([]);
@@ -88,10 +93,15 @@ function NotebookInner() {
   const menuRef = useRef<HTMLDivElement | null>(null);
   const undoRef = useRef<() => void>(() => {});
   const insertTopRef = useRef(false);
+  const selectedIdRef = useRef<string | null>(null);
+  const receivingRef = useRef(false);
+  const codeRef = useRef<HTMLInputElement | null>(null);
 
   cellsRef.current = cells;
   editingIdRef.current = editingId;
   insertTopRef.current = insertTop;
+  selectedIdRef.current = selectedId;
+  receivingRef.current = receiving;
 
   // A toast may carry one action, used to offer Undo after a delete or to jump to a duplicate.
   const say = useCallback((message: string, action?: ToastAction) => {
@@ -487,6 +497,89 @@ function NotebookInner() {
     [mutate],
   );
 
+  /* ------------------------------------------------------------ transfer */
+
+  /**
+   * Send: push one entry's markdown to the transfer store and put the returned code on the
+   * clipboard. The code is one-shot — receiving it deletes it — and expires after 24h.
+   */
+  const sendCell = useCallback(
+    async (id: string) => {
+      const cell = cellsRef.current.find((c) => c.id === id);
+      if (!cell) return;
+      if (isImageCell(cell)) return say("Image entries cannot be sent — copy the image instead.");
+      setSendingId(id);
+      let result;
+      try {
+        result = await sendEntries([cell.text]);
+      } finally {
+        setSendingId(null);
+      }
+      if (!result.ok) return say(result.message);
+      flash(`send-${id}`);
+      try {
+        await writeClipboard(result.code);
+        say(`Code ${result.code} copied — valid 24h or until received.`);
+      } catch {
+        say(`Code ${result.code} — clipboard was blocked, so write it down.`);
+      }
+    },
+    [flash, say],
+  );
+
+  /**
+   * Where a received transfer lands: the top when that option is on, otherwise just below the
+   * selected entry, the way `b` inserts. The insertion goes through `mutate`, so it is one undo
+   * step like any other import.
+   */
+  const insertReceived = useCallback(
+    (texts: string[]) => {
+      const now = Date.now();
+      const incoming = texts.map((t) => makeCell(t, now));
+      mutate((prev) => {
+        if (insertTopRef.current) return place(prev, incoming);
+        const i = prev.findIndex((c) => c.id === selectedIdRef.current);
+        if (i < 0) return place(prev, incoming);
+        return [...prev.slice(0, i + 1), ...incoming, ...prev.slice(i + 1)];
+      });
+      setSelectedId(incoming[0].id);
+      setEditingId(null);
+      requestAnimationFrame(() =>
+        document.getElementById(`cell-${incoming[0].id}`)?.scrollIntoView({ block: "center" }),
+      );
+      return incoming.length;
+    },
+    [mutate, place],
+  );
+
+  const openReceive = useCallback(() => {
+    setReceiveOpen(true);
+    requestAnimationFrame(() => codeRef.current?.focus());
+  }, []);
+
+  const closeReceive = useCallback(() => {
+    setReceiveOpen(false);
+    setCodeInput("");
+  }, []);
+
+  const doReceive = useCallback(
+    async (raw: string) => {
+      if (receivingRef.current) return;
+      setReceiving(true);
+      let result;
+      try {
+        result = await receiveCode(raw);
+      } finally {
+        setReceiving(false);
+      }
+      if (!result.ok) return say(result.message);
+      const added = insertReceived(result.entries);
+      closeReceive();
+      say(`Received ${added} ${added === 1 ? "entry" : "entries"}.`);
+    },
+    [closeReceive, insertReceived, say],
+  );
+
   /* ------------------------------------------------------- search + bulk */
 
   const visible = useMemo(() => cells.filter((c) => matchesQuery(c, query)), [cells, query]);
@@ -721,6 +814,16 @@ function NotebookInner() {
             setRawIds((prev) => ({ ...prev, [selectedId]: !prev[selectedId] }));
           }
           break;
+        case "s":
+          if (selectedId) {
+            e.preventDefault();
+            void sendCell(selectedId);
+          }
+          break;
+        case "g":
+          e.preventDefault();
+          openReceive();
+          break;
         case "M":
           if (selectedId) {
             e.preventDefault();
@@ -757,11 +860,13 @@ function NotebookInner() {
     mergeWithNext,
     move,
     newFromClipboard,
+    openReceive,
     redo,
     remove,
     say,
     selectRelative,
     selectedId,
+    sendCell,
     undo,
   ]);
 
@@ -860,6 +965,10 @@ function NotebookInner() {
                 </button>
               ))}
               <hr />
+              <button onClick={() => { openReceive(); setMenuOpen(false); }}>
+                Receive a transfer… <kbd>g</kbd>
+              </button>
+              <hr />
               <button onClick={() => { fileRef.current?.click(); setMenuOpen(false); }}>
                 Import .md / .json…
               </button>
@@ -908,6 +1017,45 @@ function NotebookInner() {
         }}
       />
 
+      {receiveOpen && (
+        <div className="receive">
+          <label htmlFor="receive-code">Transfer code</label>
+          <input
+            id="receive-code"
+            ref={codeRef}
+            value={codeInput}
+            placeholder="e.g. 7K2QM9X"
+            aria-label="Transfer code"
+            autoComplete="off"
+            spellCheck={false}
+            maxLength={16}
+            onChange={(e) => setCodeInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void doReceive(codeInput);
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                closeReceive();
+              }
+            }}
+          />
+          <Btn
+            className="primary"
+            tip="Fetch that transfer and insert it as new entries"
+            hotkey="Enter"
+            onClick={() => void doReceive(codeInput)}
+            disabled={receiving}
+          >
+            {receiving ? "Receiving…" : "Receive"}
+          </Btn>
+          <Btn tip="Close without receiving" hotkey="Esc" onClick={closeReceive}>
+            Cancel
+          </Btn>
+          <span className="receive-note">A code works once, within 24h of being sent.</span>
+        </div>
+      )}
+
       {!storageOk && (
         <div className="banner">
           Local storage is full or blocked — entries are kept in memory only and will be lost on
@@ -921,7 +1069,8 @@ function NotebookInner() {
             Entries render on blur. <kbd>Esc</kbd>/<kbd>Ctrl+Enter</kbd> commits · <kbd>j</kbd>
             <kbd>k</kbd> move · <kbd>Enter</kbd> edit · <kbd>a</kbd>/<kbd>b</kbd> insert ·{" "}
             <kbd>dd</kbd> delete · <kbd>r</kbd> raw · <kbd>Shift+M</kbd> merge ·{" "}
-            <kbd>Ctrl+Shift+-</kbd> split · <kbd>/</kbd> search. Stored in this browser only.
+            <kbd>Ctrl+Shift+-</kbd> split · <kbd>/</kbd> search · <kbd>s</kbd> send ·{" "}
+            <kbd>g</kbd> receive. Stored in this browser only.
           </span>
           <button className="hint-close" onClick={() => setShowHint(false)} aria-label="Hide the shortcut hints">
             ✕
@@ -969,6 +1118,9 @@ function NotebookInner() {
             onMove={(d) => move(cell.id, d)}
             richPaste={richPaste}
             flashed={flashed === cell.id}
+            sendFlashed={flashed === `send-${cell.id}`}
+            sending={sendingId === cell.id}
+            onSend={() => void sendCell(cell.id)}
             onCopy={async () => {
               try {
                 if (isImageCell(cell)) {

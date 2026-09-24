@@ -10,7 +10,15 @@ const staticExport = process.env.STATIC_EXPORT === "1";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
-  ...(staticExport ? { output: "export" as const, assetPrefix: "./" } : {}),
+  ...(staticExport
+    ? {
+        output: "export" as const,
+        assetPrefix: "./",
+        // The static build parks app/api, which the transfer unit tests import. Type checking
+        // still runs on every other path: `npm run typecheck`, the default build, and CI.
+        typescript: { ignoreBuildErrors: true },
+      }
+    : {}),
 };
 
 export default nextConfig;
