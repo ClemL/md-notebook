@@ -913,3 +913,39 @@ test.describe("dropdowns on a short screen", () => {
     }
   });
 });
+
+/* ------------------------------------------------------------ ADO URL paste */
+
+test("a bare Azure DevOps URL pastes as a link naming what it points at", async ({ page }) => {
+  const pr = "https://dev.azure.com/inscriptrx/Org/_git/Model.Landing.Optum/pullrequest/2865";
+  await page.getByRole("button", { name: /New empty entry/ }).click();
+  const ta = page.locator("textarea.editor");
+  await ta.evaluate((el, url) => {
+    const dt = new DataTransfer();
+    dt.setData("text/plain", url);
+    el.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+  }, pr);
+
+  await expect(ta).toHaveValue(`[Model.Landing.Optum PR !2865](${pr})`);
+  await ta.press("Escape");
+  await expect(page.locator(`.md a[href="${pr}"]`)).toHaveText("Model.Landing.Optum PR !2865");
+});
+
+test("a dev.azure.com URL of no recognized shape is left to the browser", async ({ page }) => {
+  const plain = "https://dev.azure.com/inscriptrx/Org/_workitems/edit/1403";
+  await page.getByRole("button", { name: /New empty entry/ }).click();
+  const ta = page.locator("textarea.editor");
+
+  // dispatchEvent returns false when a handler called preventDefault. Nothing claims this paste,
+  // so the browser inserts the bare URL itself and the entry autolinks it on render.
+  const claimed = await ta.evaluate((el, url) => {
+    const dt = new DataTransfer();
+    dt.setData("text/plain", url);
+    return !el.dispatchEvent(
+      new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }),
+    );
+  }, plain);
+
+  expect(claimed).toBe(false);
+  await expect(ta).toHaveValue("");
+});

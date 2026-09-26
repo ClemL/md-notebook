@@ -6,7 +6,7 @@ import MarkdownView from "./MarkdownView";
 import ImageCell from "./ImageCell";
 import { Cell, formatStamp, isImageCell } from "@/lib/markdown";
 import { continueListOnEnter, insertAt, isUrl, wrapSelectionAsLink } from "@/lib/editor";
-import { htmlIsWorthConverting, htmlToMarkdown } from "@/lib/richPaste";
+import { htmlIsWorthConverting, htmlToMarkdown, rewriteAzureDevOpsUrl } from "@/lib/richPaste";
 import { maybeTable } from "@/lib/table";
 
 const COLLAPSE_PX = 420;
@@ -168,6 +168,15 @@ export default function CellView({
     if (start !== end && isUrl(plain)) {
       e.preventDefault();
       applyEdit(el, wrapSelectionAsLink(el.value, start, end, plain));
+      return;
+    }
+
+    // A bare Azure DevOps URL on its own becomes a link labelled with what it points at:
+    // the wiki page, the file, the branch and file, or the pull request.
+    const adoLink = rewriteAzureDevOpsUrl(plain);
+    if (adoLink) {
+      e.preventDefault();
+      applyEdit(el, insertAt(el.value, start, end, adoLink));
       return;
     }
 
