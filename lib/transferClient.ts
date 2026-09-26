@@ -29,7 +29,16 @@ async function errorBody(res: Response): Promise<TransferErrorBody | null> {
   return null;
 }
 
-function describe(code: TransferErrorCode | null, fallback: string, message?: string): string {
+function describe(
+  code: TransferErrorCode | null,
+  fallback: string,
+  message?: string,
+  status?: number,
+): string {
+  // A static copy of the app (Azure Storage, IIS, a file:// folder) has no API routes at all.
+  if (status === 404 && !code) {
+    return "Transfer needs the hosted app — this copy has no server.";
+  }
   switch (code) {
     case "not_configured":
       return "Transfer is not set up on this deployment (missing Upstash env vars).";
@@ -67,7 +76,7 @@ export async function sendEntries(entries: string[]): Promise<SendResult> {
     const body = await errorBody(res);
     return {
       ok: false,
-      message: describe(body?.error ?? null, `Send failed (${res.status}).`, body?.message),
+      message: describe(body?.error ?? null, `Send failed (${res.status}).`, body?.message, res.status),
     };
   }
 
@@ -99,7 +108,7 @@ export async function receiveCode(raw: string): Promise<ReceiveResult> {
     const body = await errorBody(res);
     return {
       ok: false,
-      message: describe(body?.error ?? null, `Receive failed (${res.status}).`, body?.message),
+      message: describe(body?.error ?? null, `Receive failed (${res.status}).`, body?.message, res.status),
     };
   }
 

@@ -79,16 +79,6 @@ a {
   padding-right: 16px;
 }
 
-/*
- * Extra compact: drop the centered column so the notebook uses the whole window. Only the outer
- * page box changes — entry padding and the header's own spacing stay as they are.
- */
-.app.compact {
-  max-width: none;
-  margin: 0;
-  padding: 0 0 48px;
-}
-
 header.bar {
   position: sticky;
   top: 0;
@@ -430,17 +420,24 @@ kbd {
   display: inline-flex;
 }
 
+/* Positioned against the viewport by Dropdown, so it is clamped to the visible height and
+   scrolls internally instead of running off the bottom of a phone screen. */
 .menu {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 6px);
+  position: fixed;
   z-index: 40;
-  min-width: 260px;
+  min-width: min(260px, calc(100vw - 16px));
+  max-height: 80vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: var(--panel-2);
   border: 1px solid var(--border-strong);
   border-radius: 5px;
   padding: 5px;
   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.5);
+}
+
+.menuwrap-anchor {
+  display: inline-flex;
 }
 
 .menu button,
@@ -738,4 +735,247 @@ button.thumb img {
   position: absolute;
   top: 16px;
   right: 16px;
+}
+
+/* ---------- hint line ---------- */
+
+.hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+button.hint-close {
+  flex: none;
+  padding: 2px 7px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--fg-dim);
+}
+
+/* ---------- collapsed entries ---------- */
+
+button.collapse-toggle {
+  min-width: 28px;
+  padding-inline: 6px;
+  color: var(--fg-dim);
+}
+
+.cell.collapsed {
+  border-color: #3a4350;
+  box-shadow: inset 3px 0 0 #6b7686;
+}
+
+.cell.collapsed .cell-head {
+  background: #191f27;
+}
+
+.collapsed-chip {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--fg-dim);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  padding: 1px 8px;
+  margin-right: 6px;
+  white-space: nowrap;
+}
+
+/* Two lines of rendered output, whatever the block structure underneath. */
+.cell-body.collapsed {
+  position: relative;
+  max-height: 3.4em;
+  overflow: hidden;
+  cursor: zoom-in;
+}
+
+.cell-body.collapsed > * {
+  margin-top: 0;
+}
+
+.cell-body.collapsed::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 1.6em;
+  background: linear-gradient(rgba(22, 26, 33, 0), var(--panel));
+  pointer-events: none;
+}
+
+.cell-body.collapsed .md > *:first-child {
+  margin-top: 6px;
+}
+
+/* ---------- compact mode ---------- */
+
+[data-compact="on"] .bar {
+  gap: 5px;
+  padding-block: 6px;
+  margin-bottom: 8px;
+}
+
+[data-compact="on"] button {
+  font-size: 11px;
+  padding: 3px 7px;
+}
+
+[data-compact="on"] .hint {
+  font-size: 11px;
+  margin-bottom: 8px;
+}
+
+[data-compact="on"] .cell {
+  margin-bottom: 6px;
+  border-radius: 4px;
+}
+
+[data-compact="on"] .cell-head {
+  padding: 3px 6px;
+  gap: 4px;
+}
+
+[data-compact="on"] .cell-body {
+  padding: 0 10px;
+  font-size: 13px;
+}
+
+[data-compact="on"] .md p,
+[data-compact="on"] .md ul,
+[data-compact="on"] .md ol {
+  margin: 5px 0;
+}
+
+[data-compact="on"] .md > *:first-child {
+  margin-top: 8px;
+}
+
+[data-compact="on"] .md > *:last-child {
+  margin-bottom: 8px;
+}
+
+[data-compact="on"] .md h1,
+[data-compact="on"] .md h2,
+[data-compact="on"] .md h3 {
+  margin: 10px 0 5px;
+}
+
+[data-compact="on"] .md pre {
+  padding: 8px;
+}
+
+[data-compact="on"] textarea.editor {
+  font-size: 13px;
+  min-height: 84px;
+  padding: 8px 0;
+}
+
+[data-compact="on"] .stamp,
+[data-compact="on"] .cell-index {
+  display: none;
+}
+
+[data-compact="on"] button.thumb img {
+  max-height: 160px;
+}
+
+/* ---------- touch devices (phones, foldables) ---------- */
+
+@media (hover: none) {
+  /* Nothing can depend on hover: a tap either acts or the control is unreachable. */
+  .tipwrap > .tip {
+    display: none !important;
+  }
+
+  .codeblock .codecopy {
+    opacity: 1;
+  }
+
+  button {
+    min-height: 38px;
+    padding: 7px 12px;
+  }
+
+  [data-compact="on"] button {
+    min-height: 32px;
+    padding: 4px 9px;
+  }
+
+  button.collapse-toggle,
+  .cell-head button.danger {
+    min-width: 38px;
+  }
+
+  .search input {
+    min-height: 38px;
+    font-size: 16px;
+  }
+
+  .menu button,
+  .menu label {
+    padding: 10px 8px;
+  }
+
+  .menu label input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+  }
+
+  button.codecopy {
+    min-height: 0;
+    padding: 4px 8px;
+  }
+
+  .lightbox-close {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* Narrow screens: the entry toolbar wraps instead of running off the edge, where the
+   trailing controls (reorder, delete, the collapsed chip) would be unreachable. */
+@media (max-width: 640px) {
+  .cell-head {
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+
+  .cell-head .spacer {
+    display: none;
+  }
+
+  .cell-head .stamp {
+    order: 1;
+    margin-left: auto;
+  }
+}
+
+/* The cover screen of a folded phone: keep the chrome out of the way. */
+@media (max-width: 460px) {
+  .app {
+    padding-block: 10px 72px;
+  }
+
+  .bar {
+    gap: 6px;
+  }
+
+  .search {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  .cell-body {
+    padding-inline: 10px;
+  }
+
+  .toast {
+    left: 12px;
+    right: 12px;
+    transform: none;
+    max-width: none;
+  }
+
+  .cell-head .stamp {
+    display: none;
+  }
 }

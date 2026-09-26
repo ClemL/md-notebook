@@ -1,0 +1,81 @@
+# Builds md-notebook and publishes the static site to an Azure Storage $web container.
+# Set the variables below (or override them in the pipeline UI) before the first run.
+
+trigger:
+  branches:
+    include: [main]
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  storageAccount: inscriptrxtools
+  azureSubscription: internal-tools-service-connection
+
+stages:
+  - stage: verify
+    displayName: Build and test
+    jobs:
+      - job: build
+        steps:
+          - task: NodeTool@0
+            displayName: Use Node 22
+            inputs:
+              versionSpec: 22.x
+
+          - script: npm ci
+            displayName: Install dependencies
+
+          - script: npm run typecheck
+            displayName: Typecheck
+
+          - script: npm test
+            displayName: Unit tests
+
+          - script: npx playwright install --with-deps chromium
+            displayName: Install the test browser
+
+          - script: npm run build && npm run test:e2e
+            displayName: End-to-end tests
+
+          - script: npm run build:static
+            displayName: Build the static site
+
+          - publish: out
+            artifact: site
+            displayName: Publish the site artifact
+
+  - stage: deploy
+    displayName: Deploy to Azure Storage
+    dependsOn: verify
+    condition: succeeded()
+    jobs:
+      - deployment: storage
+        environment: internal-tools
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - download: current
+                  artifact: site
+
+                - task: AzureCLI@2
+                  displayName: Upload to $web
+                  inputs:
+                    azureSubscription: $(azureSubscription)
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      az storage blob service-properties update \
+                        --account-name $(storageAccount) \
+                        --static-website true \
+                        --index-document index.html \
+                        --404-document 404.html
+                      az storage blob upload-batch \
+                        --account-name $(storageAccount) \
+                        --destination '$web' \
+                        --source "$(Pipeline.Workspace)/site" \
+                        --overwrite
+                      az storage account show \
+                        --name $(storageAccount) \
+                        --query 'primaryEndpoints.web' --output tsv

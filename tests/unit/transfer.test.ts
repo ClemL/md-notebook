@@ -258,3 +258,33 @@ describe("browser client error messages", () => {
     await expect(receiveCode("7K2QM9X")).resolves.toEqual({ ok: true, entries: ["a", "b"] });
   });
 });
+
+describe("a static copy with no API routes", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const notFound = () =>
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("not found", { status: 404, headers: { "content-type": "text/html" } })),
+    );
+
+  it("says so rather than reporting a bare 404 on send", async () => {
+    notFound();
+    const result = await sendEntries(["something"]);
+    expect(result).toEqual({
+      ok: false,
+      message: "Transfer needs the hosted app — this copy has no server.",
+    });
+  });
+
+  it("says so on receive too", async () => {
+    notFound();
+    const result = await receiveCode("7K2QM9X");
+    expect(result).toEqual({
+      ok: false,
+      message: "Transfer needs the hosted app — this copy has no server.",
+    });
+  });
+});

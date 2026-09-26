@@ -73,8 +73,8 @@ and a serverless function, and the app runs fine with it unconfigured.
   **Checkbox All** applies it to every entry.
 - **Timestamps** on every entry, and long entries are clamped with *Show more* so one big paste does
   not bury the rest.
-- **Templates** in the ⋯ menu: meeting summary (dated, with Decisions and Todos sections), daily
-  scratch, 2×2 and 3×3 table skeletons, code snippet, link list.
+- **Templates** live in their own dropdown: meeting summary (dated, with Decisions and Todos
+  sections), daily scratch, 2×2 and 3×3 table skeletons, code snippet, link list.
 - **Tabular paste becomes a table.** Markdown tables render on their own; what does not is text that
   only looks tabular. A tab-separated grid (Excel, a query result) is converted to a markdown table
   on paste, and pipe rows written without the `| --- |` delimiter row GFM requires have it inserted.
@@ -97,10 +97,11 @@ and a serverless function, and the app runs fine with it unconfigured.
   just a blank line.
 - **New entries go to the top** (⋯ menu) puts new, pasted, templated and imported entries above the
   existing ones instead of below. `a` and `b` still insert relative to the selected entry.
-- **Extra compact** (⋯ menu, off by default) drops the centered 980px column so the notebook runs
-  edge to edge in the window. Only the outer page box changes — entries keep their own padding.
-- **Show keyboard hint** (⋯ menu, on by default) controls the shortcut line under the header. Off
-  removes it from the document rather than hiding it, so it reserves no space.
+- **Compact mode** (⋯ menu) tightens spacing and type for small screens and long notebooks.
+- **The shortcut hint line** can be dismissed with its ✕ and brought back from the ⋯ menu.
+- **Collapse an entry** with the ▾ button to leave two lines of it visible; the entry keeps a
+  marked edge, a `+n lines` chip, and its collapsed state across reloads. Double-click a collapsed
+  entry to expand it. Image entries collapse to their header.
 - **Send / Receive.** Ad hoc, write-once transfer of an entry between machines, for when the
   notebook on the laptop has something the notebook on the desktop needs. **Send** (`s`, or the
   button in an entry's toolbar) uploads that entry's markdown and copies a 7-character code to the
@@ -166,6 +167,43 @@ at hydration. On a machine with a pre-installed Chromium (a sandbox, a locked-do
 
 CI (`.github/workflows/ci.yml`) runs typecheck, unit tests, build, and the end-to-end suite on every
 push and pull request, and uploads the Playwright report when something fails.
+
+## Phones and foldables
+
+The layout is fluid from a 412px cover screen up, and touch devices get their own rules: hover
+tooltips are suppressed (they stick after a tap), the code-block copy button is always visible
+rather than hover-revealed, and controls are at least 38px tall. On a OnePlus Open's cover screen,
+hiding the hint line and enabling compact mode takes the chrome above the first entry from 31% of
+the screen down to 17%; on the inner screen, from 16% to 5%.
+
+Dropdowns are measured against the visible viewport and clamped to it, so a menu taller than the
+screen scrolls inside itself rather than running past the bottom edge — an overlay cannot be
+brought into view by scrolling the page behind it.
+
+## Hosting it yourself
+
+`npm run build:static` writes a self-contained site to `out/` — 1.1 MB of plain files, no Node
+runtime, no server component. Relative asset paths mean it also works opened directly from disk
+over `file://`, so a copy in a OneDrive folder runs offline.
+
+`npm run build:static` excludes the Send/Receive API routes, which a file host cannot run — the
+static copy says so plainly if you try to send from it. Everything else works, offline included.
+
+**Azure Storage static website** (HTTPS included, nothing to run):
+
+```powershell
+.\scripts\Deploy-AzureStaticSite.ps1 -StorageAccount 'inscriptrxtools' -ResourceGroup 'rg-internal-tools'
+```
+
+`azure-pipelines.yml` does the same from Azure DevOps: typecheck, unit tests, end-to-end tests,
+static build, then upload to the `$web` container.
+
+**IIS**: copy `out/` to the site folder. Serve it over **HTTPS** — `navigator.clipboard` requires a
+secure context, so on plain `http://hostname` the paste button, every copy button and image paste
+stop working. `http://localhost` is exempt; a real hostname is not.
+
+Browser storage is per-origin, so moving between hosts does not carry the notebook with it. Use
+**Backup as .json** on the old URL and import it on the new one.
 
 ## Deploy to Vercel
 

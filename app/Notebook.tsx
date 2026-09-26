@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Btn from "./Btn";
 import CellView from "./CellView";
+import Dropdown from "./Dropdown";
 import { FlashProvider, useFlash } from "./flash";
 import {
   Cell,
@@ -27,7 +28,7 @@ import {
 import { mergeTexts, splitAt } from "@/lib/editor";
 import { copyImage, imageFromTransfer, readClipboardImage, storeImage } from "@/lib/image";
 import { maybeTable } from "@/lib/table";
-import { readClipboardSmart, rewriteAzureDevOpsUrl } from "@/lib/richPaste";
+import { readClipboardSmart } from "@/lib/richPaste";
 import { receiveCode, sendEntries } from "@/lib/transferClient";
 import { TEMPLATES } from "@/lib/templates";
 
@@ -36,6 +37,7 @@ const RICH_KEY = "md-notebook:richpaste";
 const TOP_KEY = "md-notebook:inserttop";
 const COMPACT_KEY = "md-notebook:compact";
 const HINT_KEY = "md-notebook:hint";
+const COLLAPSED_KEY = "md-notebook:collapsed";
 const HISTORY_LIMIT = 30;
 
 type ToastAction = { label: string; run: () => void };
@@ -68,7 +70,7 @@ function NotebookInner() {
   const [insertTop, setInsertTop] = useState(false);
   const [compact, setCompact] = useState(false);
   const [showHint, setShowHint] = useState(true);
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [collapsedIds, setCollapsedIds] = useState<Record<string, boolean>>({});
   const [storageOk, setStorageOk] = useState(true);
   const [dragging, setDragging] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -88,7 +90,6 @@ function NotebookInner() {
   const toastTimer = useRef<number | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
-  const menuRef = useRef<HTMLDivElement | null>(null);
   const undoRef = useRef<() => void>(() => {});
   const insertTopRef = useRef(false);
   const selectedIdRef = useRef<string | null>(null);
@@ -170,6 +171,14 @@ function NotebookInner() {
     setInsertTop(localStorage.getItem(TOP_KEY) === "1");
     setCompact(localStorage.getItem(COMPACT_KEY) === "1");
     setShowHint(localStorage.getItem(HINT_KEY) !== "0");
+    try {
+      const saved: unknown = JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? "[]");
+      if (Array.isArray(saved)) {
+        setCollapsedIds(Object.fromEntries(saved.filter((id) => typeof id === "string").map((id) => [id, true])));
+      }
+    } catch {
+      /* a corrupt list just means nothing starts collapsed */
+    }
     setLoaded(true);
   }, []);
 
@@ -201,6 +210,17 @@ function NotebookInner() {
   useEffect(() => {
     if (loaded) localStorage.setItem(HINT_KEY, showHint ? "1" : "0");
   }, [showHint, loaded]);
+
+  // Only ids that still exist are remembered, so the list cannot grow without bound.
+  useEffect(() => {
+    if (!loaded) return;
+    const live = cells.filter((c) => collapsedIds[c.id]).map((c) => c.id);
+    localStorage.setItem(COLLAPSED_KEY, JSON.stringify(live));
+  }, [collapsedIds, cells, loaded]);
+
+  const toggleCollapsed = useCallback((id: string) => {
+    setCollapsedIds((prev) => ({ ...prev, [id]: !prev[id] }));
+  }, []);
 
   // Another tab wrote the notebook: adopt its state instead of overwriting it on our next save.
   // An entry being edited here is preserved, so a background tab cannot discard in-progress text.
@@ -313,17 +333,10 @@ function NotebookInner() {
       text = payload.text;
       rich = payload.rich;
       if (!rich) {
-        // A bare Azure DevOps URL reads better as a link naming what it points at; anything else
-        // that only looks tabular becomes a real table.
-        const link = rewriteAzureDevOpsUrl(text);
-        if (link) {
-          text = link;
-        } else {
-          const table = maybeTable(text);
-          if (table) {
-            text = table;
-            rich = true;
-          }
+        const table = maybeTable(text);
+        if (table) {
+          text = table;
+          rich = true;
         }
       }
     } catch {
@@ -856,25 +869,11 @@ function NotebookInner() {
     undo,
   ]);
 
-  useEffect(() => {
-    if (!menuOpen) return;
-    const onDown = (e: MouseEvent) => {
-      if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false);
-    };
-    const onEsc = (e: KeyboardEvent) => e.key === "Escape" && setMenuOpen(false);
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onEsc);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onEsc);
-    };
-  }, [menuOpen]);
-
   /* ----------------------------------------------------------------- view */
 
   return (
     // data-ready flips once client state is restored; tests wait on it instead of racing hydration.
-    <div className={`app${compact ? " compact" : ""}`} data-ready={loaded ? "true" : undefined}>
+    <div className="app" data-ready={loaded ? "true" : undefined} data-compact={compact ? "on" : undefined}>
       <header className="bar">
         <span className="title">md-notebook</span>
 
@@ -934,61 +933,53 @@ function NotebookInner() {
           Export{filtering ? ` (${visible.length})` : " All"}
         </Btn>
 
-        <div className="menuwrap" ref={menuRef}>
-          <Btn tip="More actions" onClick={() => setMenuOpen((v) => !v)} aria-expanded={menuOpen}>
-            ⋯
-          </Btn>
-          {menuOpen && (
-            <div className="menu" role="menu">
-              <button onClick={() => { checkboxAll(); setMenuOpen(false); }}>
-                Checkbox All <kbd>t</kbd>
-              </button>
-              <hr />
-              <span className="menu-label">Insert template</span>
-              {TEMPLATES.map((t) => (
-                <button key={t.id} onClick={() => { insertTemplate(t.id); setMenuOpen(false); }}>
-                  {t.label}
-                </button>
-              ))}
-              <hr />
-              <button onClick={() => { openReceive(); setMenuOpen(false); }}>
-                Receive a transfer… <kbd>g</kbd>
-              </button>
-              <hr />
-              <button onClick={() => { fileRef.current?.click(); setMenuOpen(false); }}>
-                Import .md / .json…
-              </button>
-              <button onClick={() => { backup(); setMenuOpen(false); }}>Backup as .json</button>
-              <hr />
-              <label>
-                <input type="checkbox" checked={separators} onChange={(e) => setSeparators(e.target.checked)} />
-                <span>
-                  <code>---</code> between entries on export
-                </span>
-              </label>
-              <label>
-                <input type="checkbox" checked={richPaste} onChange={(e) => setRichPaste(e.target.checked)} />
-                <span>Convert rich paste to markdown</span>
-              </label>
-              <label>
-                <input type="checkbox" checked={insertTop} onChange={(e) => setInsertTop(e.target.checked)} />
-                <span>New entries go to the top</span>
-              </label>
-              <label>
-                <input type="checkbox" checked={compact} onChange={(e) => setCompact(e.target.checked)} />
-                <span>Extra compact (use the full window width)</span>
-              </label>
-              <label>
-                <input type="checkbox" checked={showHint} onChange={(e) => setShowHint(e.target.checked)} />
-                <span>Show keyboard hint</span>
-              </label>
-              <hr />
-              <button className="danger" onClick={() => { clearAll(); setMenuOpen(false); }}>
-                Delete all entries
-              </button>
-            </div>
-          )}
-        </div>
+        <Dropdown label="Templates" tip="Insert a template" align="right">
+          <span className="menu-label">Insert template</span>
+          {TEMPLATES.map((t) => (
+            <button key={t.id} onClick={() => insertTemplate(t.id)}>
+              {t.label}
+            </button>
+          ))}
+        </Dropdown>
+
+        <Dropdown label="⋯" tip="More actions" align="right">
+          <button onClick={checkboxAll}>
+            Checkbox All <kbd>t</kbd>
+          </button>
+          <button onClick={openReceive}>
+            Receive a transfer… <kbd>g</kbd>
+          </button>
+          <hr />
+          <button onClick={() => fileRef.current?.click()}>Import .md / .json…</button>
+          <button onClick={backup}>Backup as .json</button>
+          <hr />
+          <label>
+            <input type="checkbox" checked={separators} onChange={(e) => setSeparators(e.target.checked)} />
+            <span>
+              <code>---</code> between entries on export
+            </span>
+          </label>
+          <label>
+            <input type="checkbox" checked={richPaste} onChange={(e) => setRichPaste(e.target.checked)} />
+            <span>Convert rich paste to markdown</span>
+          </label>
+          <label>
+            <input type="checkbox" checked={insertTop} onChange={(e) => setInsertTop(e.target.checked)} />
+            <span>New entries go to the top</span>
+          </label>
+          <label>
+            <input type="checkbox" checked={compact} onChange={(e) => setCompact(e.target.checked)} />
+            <span>Compact mode</span>
+          </label>
+          <label>
+            <input type="checkbox" checked={showHint} onChange={(e) => setShowHint(e.target.checked)} />
+            <span>Show the shortcut hints</span>
+          </label>
+          <hr />
+          <button className="danger" onClick={clearAll}>
+            Delete all entries
+          </button>
+        </Dropdown>
       </header>
 
       <input
@@ -1051,11 +1042,16 @@ function NotebookInner() {
 
       {showHint && (
         <p className="hint">
-          Entries render on blur. <kbd>Esc</kbd>/<kbd>Ctrl+Enter</kbd> commits · <kbd>j</kbd>
-          <kbd>k</kbd> move · <kbd>Enter</kbd> edit · <kbd>a</kbd>/<kbd>b</kbd> insert ·{" "}
-          <kbd>dd</kbd> delete · <kbd>r</kbd> raw · <kbd>Shift+M</kbd> merge ·{" "}
-          <kbd>Ctrl+Shift+-</kbd> split · <kbd>/</kbd> search · <kbd>s</kbd> send ·{" "}
-          <kbd>g</kbd> receive. Stored in this browser only.
+          <span>
+            Entries render on blur. <kbd>Esc</kbd>/<kbd>Ctrl+Enter</kbd> commits · <kbd>j</kbd>
+            <kbd>k</kbd> move · <kbd>Enter</kbd> edit · <kbd>a</kbd>/<kbd>b</kbd> insert ·{" "}
+            <kbd>dd</kbd> delete · <kbd>r</kbd> raw · <kbd>Shift+M</kbd> merge ·{" "}
+            <kbd>Ctrl+Shift+-</kbd> split · <kbd>/</kbd> search · <kbd>s</kbd> send ·{" "}
+            <kbd>g</kbd> receive. Stored in this browser only.
+          </span>
+          <button className="hint-close" onClick={() => setShowHint(false)} aria-label="Hide the shortcut hints">
+            ✕
+          </button>
         </p>
       )}
 
@@ -1079,6 +1075,8 @@ function NotebookInner() {
             editing={editingId === cell.id}
             selected={selectedId === cell.id}
             raw={!!rawIds[cell.id]}
+            collapsed={!!collapsedIds[cell.id]}
+            onToggleCollapse={() => toggleCollapsed(cell.id)}
             canMerge={(() => {
               const at = cells.indexOf(cell);
               const next = cells[at + 1];
