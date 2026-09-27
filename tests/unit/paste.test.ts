@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  azureDevOpsUrlLabel,
   flattenInlineRun,
   isInlineRun,
   rewriteAzureDevOpsPath,
+  rewriteAzureDevOpsUrl,
   tidyMarkdown,
   tightenLinks,
   visibleLine,
@@ -158,5 +160,81 @@ describe("pipeline breadcrumbs with long URLs", () => {
   it("still rejects prose whose sentences are long", () => {
     const prose = `The nightly build for [TSGen](${scope}) failed again last night.\n\nRetry it from the summary page.`;
     expect(isInlineRun(prose)).toBe(false);
+  });
+});
+
+/* ------------------------------------------- bare Azure DevOps URLs pasted on their own */
+
+const WIKI = "https://dev.azure.com/inscriptrx/Org/_wiki/wikis/ScriptWellRx.wiki/910/2026-04-20-dev-notes";
+const GIT_FILE = "https://dev.azure.com/inscriptrx/Org/_git/Model.Landing.Optum?path=/Model.Landing.Optum.sln";
+const GIT_BRANCH =
+  "https://dev.azure.com/inscriptrx/Org/_git/Model.Landing.Optum?version=GBfeature/1403&path=/Model.Landing.Optum.sln";
+const PULL_REQUEST = "https://dev.azure.com/inscriptrx/Org/_git/Model.Landing.Optum/pullrequest/2865";
+
+describe("Azure DevOps URL pasted as a bare URL", () => {
+  it("labels a wiki page with its page name", () => {
+    expect(rewriteAzureDevOpsUrl(WIKI)).toBe(`[2026-04-20-dev-notes](${WIKI})`);
+  });
+
+  it("labels a repo file with its filename", () => {
+    expect(rewriteAzureDevOpsUrl(GIT_FILE)).toBe(`[Model.Landing.Optum.sln](${GIT_FILE})`);
+  });
+
+  it("labels a repo file on a branch with branch / filename", () => {
+    expect(rewriteAzureDevOpsUrl(GIT_BRANCH)).toBe(
+      `[feature/1403 / Model.Landing.Optum.sln](${GIT_BRANCH})`,
+    );
+  });
+
+  it("labels a pull request with repo and number", () => {
+    expect(rewriteAzureDevOpsUrl(PULL_REQUEST)).toBe(
+      `[Model.Landing.Optum PR !2865](${PULL_REQUEST})`,
+    );
+  });
+
+  it("decodes a branch name whose slash arrived percent-encoded", () => {
+    const encoded =
+      "https://dev.azure.com/inscriptrx/Org/_git/Model.Landing.Optum?version=GBfeature%2F1403&path=%2FModel.Landing.Optum.sln";
+    expect(azureDevOpsUrlLabel(encoded)).toBe("feature/1403 / Model.Landing.Optum.sln");
+    // Raw and encoded forms of the same link produce the same label.
+    expect(azureDevOpsUrlLabel(encoded)).toBe(azureDevOpsUrlLabel(GIT_BRANCH));
+  });
+
+  it("reads version and path in either order", () => {
+    const swapped =
+      "https://dev.azure.com/inscriptrx/Org/_git/Model.Landing.Optum?path=/src/Deep/Nested.cs&version=GBmain";
+    expect(azureDevOpsUrlLabel(swapped)).toBe("main / Nested.cs");
+  });
+
+  it("treats a pullrequest path segment as a pull request whatever the query says", () => {
+    // Guard: the shapes cannot collide today, but the PR path must always win if they ever do.
+    const hybrid = `${PULL_REQUEST}?path=/Model.Landing.Optum.sln&version=GBmain`;
+    expect(azureDevOpsUrlLabel(hybrid)).toBe("Model.Landing.Optum PR !2865");
+  });
+
+  it("leaves tags, commits and other version prefixes alone", () => {
+    const base = "https://dev.azure.com/inscriptrx/Org/_git/Model.Landing.Optum?path=/a.sln";
+    expect(azureDevOpsUrlLabel(`${base}&version=GTv1.2.0`)).toBeNull();
+    expect(azureDevOpsUrlLabel(`${base}&version=GC0ff1ce`)).toBeNull();
+  });
+
+  it("falls through on any dev.azure.com URL that is not one of the four shapes", () => {
+    expect(azureDevOpsUrlLabel("https://dev.azure.com/inscriptrx/Org")).toBeNull();
+    expect(azureDevOpsUrlLabel("https://dev.azure.com/inscriptrx/Org/_workitems/edit/1403")).toBeNull();
+    expect(azureDevOpsUrlLabel("https://dev.azure.com/inscriptrx/Org/_git/Model.Landing.Optum")).toBeNull();
+    expect(azureDevOpsUrlLabel("https://dev.azure.com/inscriptrx/Org/_wiki/wikis/ScriptWellRx.wiki")).toBeNull();
+    expect(rewriteAzureDevOpsUrl("https://dev.azure.com/inscriptrx/Org")).toBeNull();
+  });
+
+  it("ignores other hosts and URLs embedded in larger text", () => {
+    expect(azureDevOpsUrlLabel("https://github.com/ClemL/md-notebook/pull/7")).toBeNull();
+    expect(azureDevOpsUrlLabel(`see ${PULL_REQUEST} for the fix`)).toBeNull();
+    expect(azureDevOpsUrlLabel(`${WIKI}\n${GIT_FILE}`)).toBeNull();
+  });
+
+  it("tolerates surrounding whitespace on an otherwise bare URL", () => {
+    expect(rewriteAzureDevOpsUrl(`  ${PULL_REQUEST}\n`)).toBe(
+      `[Model.Landing.Optum PR !2865](${PULL_REQUEST})`,
+    );
   });
 });
