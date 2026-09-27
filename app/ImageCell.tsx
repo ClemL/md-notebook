@@ -1,20 +1,19 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import Annotator, { AnnotationLayer } from "./Annotator";
 import Btn from "./Btn";
 import { Cell, formatStamp } from "@/lib/markdown";
-import { formatBytes, type StoredImage } from "@/lib/image";
+import { copyImage, formatBytes, type StoredImage } from "@/lib/image";
 import type { Shape } from "@/lib/annotate";
 
-/** Excalidraw is a large bundle; it arrives only when someone opens it. */
-const ExcalidrawEditor = dynamic(() => import("./ExcalidrawEditor"), { ssr: false });
+/** Where the Excalidraw button sends you. A self-hosted instance can be swapped in here. */
+export const EXCALIDRAW_URL = "https://excalidraw.com/";
 
 /**
  * An image entry holds a pasted screenshot. It can be copied back to the clipboard, deleted, and
- * marked up two ways: the built-in annotator, which keeps shapes beside the pixels, and Excalidraw,
- * which replaces the image with its own export while keeping the scene for later edits.
+ * marked up either in the built-in annotator or in Excalidraw — the latter by handing the image
+ * to the clipboard and opening excalidraw.com in its own window, where Ctrl+V drops it in.
  */
 export default function ImageCell({
   cell,
@@ -27,6 +26,7 @@ export default function ImageCell({
   onCopy,
   onDelete,
   onImageChange,
+  onNotify,
 }: {
   cell: Cell;
   index: number;
@@ -38,9 +38,10 @@ export default function ImageCell({
   onCopy: () => void;
   onDelete: () => void;
   onImageChange: (next: StoredImage) => void;
+  onNotify: (message: string) => void;
 }) {
   const [zoomed, setZoomed] = useState(false);
-  const [editor, setEditor] = useState<"none" | "draw" | "excalidraw">("none");
+  const [editor, setEditor] = useState<"none" | "draw">("none");
   const image = cell.image!;
   const marked = !!image.annotations?.length;
 
@@ -55,6 +56,25 @@ export default function ImageCell({
     document.addEventListener("keydown", onKey, true);
     return () => document.removeEventListener("keydown", onKey, true);
   }, [zoomed]);
+
+  /**
+   * Copy first, then open: the clipboard write needs this document focused, which it loses the
+   * moment the new window appears. Opening still counts as user-activated afterwards.
+   */
+  const openInExcalidraw = async () => {
+    let copied = true;
+    try {
+      await copyImage(image);
+    } catch {
+      copied = false;
+    }
+    window.open(EXCALIDRAW_URL, "_blank", "noopener,noreferrer");
+    onNotify(
+      copied
+        ? "Image copied — press Ctrl+V in Excalidraw."
+        : "Excalidraw opened, but the image could not be copied.",
+    );
+  };
 
   return (
     <section
@@ -81,8 +101,11 @@ export default function ImageCell({
         >
           Draw{marked ? ` (${image.annotations!.length})` : ""}
         </Btn>
-        <Btn tip="Open this image in Excalidraw" onClick={() => setEditor("excalidraw")}>
-          Excalidraw
+        <Btn
+          tip="Copy the image and open Excalidraw in a new window — paste it there with Ctrl+V"
+          onClick={openInExcalidraw}
+        >
+          Excalidraw ↗
         </Btn>
         <Btn tip="Copy the image to the clipboard" hotkey="c" flash={flashed} onClick={onCopy}>
           Copy
@@ -110,17 +133,6 @@ export default function ImageCell({
           onCancel={() => setEditor("none")}
           onSave={(shapes: Shape[]) => {
             onImageChange({ ...image, annotations: shapes.length ? shapes : undefined });
-            setEditor("none");
-          }}
-        />
-      )}
-
-      {editor === "excalidraw" && (
-        <ExcalidrawEditor
-          image={image}
-          onCancel={() => setEditor("none")}
-          onSave={(next) => {
-            onImageChange(next);
             setEditor("none");
           }}
         />

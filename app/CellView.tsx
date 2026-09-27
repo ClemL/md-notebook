@@ -36,6 +36,7 @@ type Props = {
   onDelete: () => void;
   onMove: (delta: -1 | 1) => void;
   onImageChange: (next: StoredImage) => void;
+  onNotify: (message: string) => void;
   onToggleRaw: () => void;
   onToggleCollapse: () => void;
   onSplit: (caret: number) => void;
@@ -70,6 +71,7 @@ export default function CellView({
   onDelete,
   onMove,
   onImageChange,
+  onNotify,
   onToggleRaw,
   onToggleCollapse,
   onSplit,
@@ -227,6 +229,7 @@ export default function CellView({
         onCopy={onCopy}
         onDelete={onDelete}
         onImageChange={onImageChange}
+        onNotify={onNotify}
       />
     );
   }

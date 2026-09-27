@@ -13,10 +13,6 @@ export type StoredImage = {
   name?: string;
   /** Built-in annotator shapes, kept beside the pixels rather than painted into them. */
   annotations?: Shape[];
-  /** Excalidraw scene elements, so a drawing can be reopened and refined. */
-  scene?: string;
-  /** The image as pasted, kept when Excalidraw replaced dataUrl with its export. */
-  original?: string;
 };
 
 import { drawShapes, type Shape } from "./annotate";

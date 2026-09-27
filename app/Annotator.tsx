@@ -6,6 +6,7 @@ import {
   arrowHead,
   arrowHeadSize,
   fontSize,
+  freedrawPoints,
   isMeaningful,
   newShapeId,
   normalizedBox,
@@ -16,12 +17,17 @@ import {
 } from "@/lib/annotate";
 import type { StoredImage } from "@/lib/image";
 
-const TOOLS: { kind: ShapeKind; label: string }[] = [
-  { kind: "arrow", label: "Arrow" },
-  { kind: "rect", label: "Box" },
-  { kind: "ellipse", label: "Ellipse" },
-  { kind: "text", label: "Text" },
+/** Excalidraw's own tool keys, so the muscle memory carries over. */
+const TOOLS: { kind: ShapeKind; label: string; keys: string[] }[] = [
+  { kind: "arrow", label: "Arrow", keys: ["a", "5"] },
+  { kind: "line", label: "Line", keys: ["l", "6"] },
+  { kind: "rect", label: "Box", keys: ["r", "2"] },
+  { kind: "ellipse", label: "Ellipse", keys: ["o", "4"] },
+  { kind: "freedraw", label: "Draw", keys: ["p", "7"] },
+  { kind: "text", label: "Text", keys: ["t", "8"] },
 ];
+
+const TOOL_BY_KEY = new Map(TOOLS.flatMap((t) => t.keys.map((k) => [k, t.kind] as const)));
 
 /** Renders one shape; shared by the editor and the read-only overlay on a cell. */
 export function ShapeMark({ shape, imageWidth }: { shape: Shape; imageWidth: number }) {
@@ -44,6 +50,29 @@ export function ShapeMark({ shape, imageWidth }: { shape: Shape; imageWidth: num
             fill={shape.color}
           />
         </g>
+      );
+    case "line":
+      return (
+        <line
+          x1={shape.x1}
+          y1={shape.y1}
+          x2={shape.x2}
+          y2={shape.y2}
+          stroke={shape.color}
+          strokeWidth={width}
+          strokeLinecap="round"
+        />
+      );
+    case "freedraw":
+      return (
+        <polyline
+          points={freedrawPoints(shape)}
+          fill="none"
+          stroke={shape.color}
+          strokeWidth={width}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
       );
     case "rect": {
       const b = normalizedBox(shape);
@@ -111,8 +140,9 @@ export function AnnotationLayer({ image }: { image: StoredImage }) {
 }
 
 /**
- * The built-in annotator: arrows, boxes, ellipses and text over the image, stored as shapes
- * rather than pixels. Pointer events cover mouse, pen and finger alike.
+ * The built-in annotator: arrows, lines, boxes, ellipses, freehand and text over the image,
+ * stored as shapes rather than pixels. Tool keys match Excalidraw's, and double-clicking
+ * anywhere drops a text label the way it does there.
  */
 export default function Annotator({
   image,
@@ -124,26 +154,92 @@ export default function Annotator({
   onCancel: () => void;
 }) {
   const [shapes, setShapes] = useState<Shape[]>(image.annotations ?? []);
+  const [undone, setUndone] = useState<Shape[]>([]);
   const [draft, setDraft] = useState<Shape | null>(null);
   const [tool, setTool] = useState<ShapeKind>("arrow");
   const [color, setColor] = useState<string>(ANNOTATION_COLORS[0]);
+  const [typing, setTyping] = useState<{ x: number; y: number; value: string } | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const drawing = useRef(false);
 
+  const commit = useCallback((shape: Shape) => {
+    setShapes((prev) => [...prev, shape]);
+    setUndone([]);
+  }, []);
+
+  const undo = useCallback(() => {
+    setShapes((prev) => {
+      if (!prev.length) return prev;
+      setUndone((u) => [prev[prev.length - 1], ...u]);
+      return prev.slice(0, -1);
+    });
+  }, []);
+
+  const redo = useCallback(() => {
+    setUndone((u) => {
+      if (!u.length) return u;
+      setShapes((prev) => [...prev, u[0]]);
+      return u.slice(1);
+    });
+  }, []);
+
+  /* --------------------------------------------------------------- keyboard */
+
   useEffect(() => {
+    // Capture phase: the notebook's own single-key shortcuts listen on window, and must not
+    // fire for keys typed at this editor.
     const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const inField = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA";
+      const mod = e.ctrlKey || e.metaKey;
+
       if (e.key === "Escape") {
         e.stopPropagation();
-        onCancel();
+        e.preventDefault();
+        if (typing) setTyping(null);
+        else onCancel();
+        return;
       }
+      if (inField) return;
+
+      if (mod && e.key.toLowerCase() === "z") {
+        e.stopPropagation();
+        e.preventDefault();
+        e.shiftKey ? redo() : undo();
+        return;
+      }
+      if (mod && e.key === "Enter") {
+        e.stopPropagation();
+        e.preventDefault();
+        onSave(shapes);
+        return;
+      }
+      if (mod || e.altKey) return;
+
+      const next = TOOL_BY_KEY.get(e.key.toLowerCase());
+      if (next) {
+        e.stopPropagation();
+        e.preventDefault();
+        setTool(next);
+        return;
+      }
+      // Swallow anything else single-key so it cannot reach the notebook behind the editor.
+      if (e.key.length === 1) e.stopPropagation();
     };
     document.addEventListener("keydown", onKey, true);
     return () => document.removeEventListener("keydown", onKey, true);
-  }, [onCancel]);
+  }, [onCancel, onSave, redo, shapes, typing, undo]);
+
+  useEffect(() => {
+    if (typing) inputRef.current?.focus();
+  }, [typing]);
+
+  /* ---------------------------------------------------------------- drawing */
 
   /** Pointer position in image-pixel space, whatever size the image is displayed at. */
   const toImage = useCallback(
-    (e: React.PointerEvent): { x: number; y: number } => {
+    (e: { clientX: number; clientY: number }): { x: number; y: number } => {
       const rect = svgRef.current?.getBoundingClientRect();
       if (!rect || !rect.width) return { x: 0, y: 0 };
       return {
@@ -154,37 +250,74 @@ export default function Annotator({
     [image.width, image.height],
   );
 
+  const startText = useCallback(
+    (e: { clientX: number; clientY: number }) => {
+      const { x, y } = toImage(e);
+      setTyping({ x, y, value: "" });
+    },
+    [toImage],
+  );
+
   const onPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
+    if (typing) {
+      setTyping(null);
+      return;
+    }
     const { x, y } = toImage(e);
 
     if (tool === "text") {
-      const text = window.prompt("Label text");
-      if (text?.trim()) {
-        setShapes((prev) => [
-          ...prev,
-          { id: newShapeId(), kind: "text", x1: x, y1: y, x2: x, y2: y, color, text: text.trim() },
-        ]);
-      }
+      startText(e);
       return;
     }
 
     e.currentTarget.setPointerCapture(e.pointerId);
     drawing.current = true;
-    setDraft({ id: newShapeId(), kind: tool, x1: x, y1: y, x2: x, y2: y, color });
+    setDraft({
+      id: newShapeId(),
+      kind: tool,
+      x1: x,
+      y1: y,
+      x2: x,
+      y2: y,
+      color,
+      ...(tool === "freedraw" ? { points: [[x, y]] as [number, number][] } : {}),
+    });
   };
 
   const onPointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
     if (!drawing.current) return;
     const { x, y } = toImage(e);
-    setDraft((d) => (d ? { ...d, x2: x, y2: y } : d));
+    setDraft((d) => {
+      if (!d) return d;
+      if (d.kind === "freedraw") {
+        return { ...d, x2: x, y2: y, points: [...(d.points ?? []), [x, y] as [number, number]] };
+      }
+      return { ...d, x2: x, y2: y };
+    });
   };
 
   const onPointerUp = () => {
     drawing.current = false;
     setDraft((d) => {
-      if (d && isMeaningful(d)) setShapes((prev) => [...prev, d]);
+      if (d && isMeaningful(d)) commit(d);
       return null;
     });
+  };
+
+  const commitText = () => {
+    if (typing?.value.trim()) {
+      commit({
+        id: newShapeId(),
+        kind: "text",
+        x1: typing.x,
+        y1: typing.y,
+        x2: typing.x,
+        y2: typing.y,
+        color,
+        text: typing.value.trim(),
+      });
+    }
+    setTyping(null);
   };
 
   return (
@@ -196,9 +329,10 @@ export default function Annotator({
             key={t.kind}
             onClick={() => setTool(t.kind)}
             aria-pressed={tool === t.kind}
+            title={`${t.label} (${t.keys[0]})`}
             className={tool === t.kind ? "primary" : undefined}
           >
-            {t.label}
+            {t.label} <kbd>{t.keys[0]}</kbd>
           </button>
         ))}
         <span className="swatches">
@@ -214,14 +348,18 @@ export default function Annotator({
           ))}
         </span>
         <span className="spacer" />
-        <button onClick={() => setShapes((prev) => prev.slice(0, -1))} disabled={!shapes.length}>
+        <span className="editor-hint">double-click for text</span>
+        <button onClick={undo} disabled={!shapes.length} title="Undo (Ctrl+Z)">
           Undo
         </button>
-        <button onClick={() => setShapes([])} disabled={!shapes.length}>
+        <button onClick={redo} disabled={!undone.length} title="Redo (Ctrl+Shift+Z)">
+          Redo
+        </button>
+        <button onClick={() => { setShapes([]); setUndone([]); }} disabled={!shapes.length}>
           Clear
         </button>
         <button onClick={onCancel}>Cancel</button>
-        <button className="primary" onClick={() => onSave(shapes)}>
+        <button className="primary" onClick={() => onSave(shapes)} title="Save (Ctrl+Enter)">
           Save
         </button>
       </div>
@@ -239,12 +377,36 @@ export default function Annotator({
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
             onPointerCancel={onPointerUp}
+            onDoubleClick={startText}
           >
             {shapes.map((s) => (
               <ShapeMark key={s.id} shape={s} imageWidth={image.width} />
             ))}
             {draft && <ShapeMark shape={draft} imageWidth={image.width} />}
           </svg>
+
+          {typing && (
+            <input
+              ref={inputRef}
+              id="annotation-text"
+              className="annotation-text-input"
+              value={typing.value}
+              placeholder="Label, then Enter"
+              style={{
+                left: `${(typing.x / image.width) * 100}%`,
+                top: `${(typing.y / image.height) * 100}%`,
+                color,
+              }}
+              onChange={(e) => setTyping((t) => (t ? { ...t, value: e.target.value } : t))}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  commitText();
+                }
+              }}
+              onBlur={commitText}
+            />
+          )}
         </div>
       </div>
     </div>

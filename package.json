@@ -10,11 +10,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "build:static": "node scripts/build-static.mjs",
-    "prebuild": "node scripts/copy-excalidraw-assets.mjs"
+    "build:static": "node scripts/build-static.mjs"
   },
   "dependencies": {
-    "@excalidraw/excalidraw": "^0.18.1",
     "@joplin/turndown-plugin-gfm": "^1.0.68",
     "highlight.js": "11.11.1",
     "next": "^16.3.5",

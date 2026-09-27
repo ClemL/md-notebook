@@ -143,23 +143,26 @@ Every button's tooltip names its shortcut. Outside a text box the notebook is in
 
 ## Marking up an image
 
-Two editors, as separate buttons on an image entry:
+Two buttons on an image entry, for two different needs:
 
-- **Draw** — the built-in annotator: arrows, boxes, ellipses and text labels in five colours.
+- **Draw** — the built-in annotator: arrows, lines, boxes, ellipses, freehand and text labels in
+  five colours. Tool keys are Excalidraw's own (`a`/`5` arrow, `l`/`6` line, `r`/`2` box, `o`/`4`
+  ellipse, `p`/`7` freehand, `t`/`8` text), with `Ctrl+Z` / `Ctrl+Shift+Z` to step through,
+  `Ctrl+Enter` to save and `Esc` to cancel. **Double-click anywhere to drop a text label**, as in
+  Excalidraw; `Esc` while typing abandons the label rather than the editor.
+
   Shapes are stored *beside* the pixels and drawn as an SVG overlay, so the screenshot itself is
-  never modified, an annotation can be removed later, and the markup stays crisp at any zoom. A
-  few hundred bytes per image rather than a re-encoded PNG. Flattening happens only on the way
-  out, when the image is copied to the clipboard. Pointer events cover mouse, pen and finger.
-- **Excalidraw** — the real editor, embedded as a component rather than an iframe. A cross-origin
-  frame of excalidraw.com can be drawn in but never read back; same-origin is what makes the round
-  trip possible. The image is loaded into the scene, and saving exports a flattened PNG while
-  keeping the scene so the drawing can be reopened and refined. The image as pasted is kept too,
-  so a second pass does not composite on top of the first.
+  never modified, an annotation can be removed later, and the markup stays crisp at any zoom — a
+  few hundred bytes per image rather than a re-encoded PNG on every edit. Flattening happens only
+  on the way out, when the image is copied. Pointer events cover mouse, pen and finger.
 
-Excalidraw is loaded on demand: opening it fetches roughly 8 MB of editor, which never touches the
-initial page load (826 KB). Its fonts are copied into `public/excalidraw-assets/` at build time by
-`scripts/copy-excalidraw-assets.mjs`, because by default it fetches them from a CDN that the
-offline, static and behind-a-proxy copies cannot reach.
+- **Excalidraw ↗** — copies the image to the clipboard and opens excalidraw.com in its own window,
+  where `Ctrl+V` drops it in. Draw there, copy the result, and paste it back into the notebook as a
+  new entry. Point `EXCALIDRAW_URL` in `app/ImageCell.tsx` at a self-hosted instance if you have
+  one.
+
+  Embedding the editor was tried and removed: it was eight megabytes of lazily-loaded bundle plus
+  a copy of its fonts, to reproduce something a second window already does well.
 
 ## Markdown support
 
@@ -202,14 +205,12 @@ brought into view by scrolling the page behind it.
 
 ## Hosting it yourself
 
-`npm run build:static` writes a self-contained site to `out/` — plain files, no Node runtime, no
-server component. It is 9.6 MB on disk, of which 8 MB is the Excalidraw editor that only downloads
-when someone opens it; the initial page load is 826 KB. Relative asset paths mean it also works opened directly from disk
+`npm run build:static` writes a self-contained site to `out/` — 1.1 MB of plain files, no Node
+runtime, no server component. Relative asset paths mean it also works opened directly from disk
 over `file://`, so a copy in a OneDrive folder runs offline.
 
 `npm run build:static` excludes the Send/Receive API routes, which a file host cannot run — the
-static copy says so plainly if you try to send from it. Everything else works, offline included,
-Excalidraw and its self-hosted fonts among it.
+static copy says so plainly if you try to send from it. Everything else works, offline included.
 
 **Azure Storage static website** (HTTPS included, nothing to run):
 

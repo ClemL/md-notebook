@@ -155,11 +155,6 @@ function normalizeCells(input: unknown): Cell[] {
           addedAt: Number(image.addedAt) || cell.createdAt,
           name: typeof image.name === "string" ? image.name : undefined,
           annotations: Array.isArray(image.annotations) ? image.annotations : undefined,
-          scene: typeof image.scene === "string" ? image.scene : undefined,
-          original:
-            typeof image.original === "string" && image.original.startsWith("data:image/")
-              ? image.original
-              : undefined,
         };
       }
       return cell;

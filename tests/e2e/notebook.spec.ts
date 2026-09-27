@@ -954,7 +954,7 @@ test("the built-in annotator stores shapes beside the image, not in it", async (
   await expect(page.locator(".annotation-layer.editing")).toBeVisible();
 
   await drag(page, [10, 10], [80, 50]);
-  await page.getByRole("button", { name: "Box", exact: true }).click();
+  await page.keyboard.press("r");
   await drag(page, [20, 30], [90, 60]);
   await page.getByRole("button", { name: "Save", exact: true }).click();
 
@@ -1009,32 +1009,100 @@ test("a stray tap does not become an annotation", async ({ page }) => {
   await page.getByRole("button", { name: "Cancel" }).click();
 });
 
-test("Excalidraw opens on the image and saves back a flattened export", async ({ page }) => {
-  test.slow();
+test("Excalidraw hands the image to the clipboard and opens in its own window", async ({ page, context }) => {
   await pasteImage(page);
-  const before = (await storedImage(page)).dataUrl;
+  await page.evaluate(() => navigator.clipboard.writeText("not an image"));
 
-  await page.getByRole("button", { name: /Open this image in Excalidraw/ }).click();
-  await expect(page.locator(".excalidraw")).toBeVisible({ timeout: 30_000 });
-  // Fonts come from the copy in public/, not a CDN, so the offline build works too.
-  expect(await page.evaluate(() => (window as never as { EXCALIDRAW_ASSET_PATH: string }).EXCALIDRAW_ASSET_PATH))
-    .toContain("/excalidraw-assets/");
+  const [popup] = await Promise.all([
+    context.waitForEvent("page"),
+    page.getByRole("button", { name: /open Excalidraw in a new window/ }).click(),
+  ]);
+  // The sandbox cannot reach the site, but the navigation target is what matters.
+  expect(popup.url() === "about:blank" || popup.url().includes("excalidraw") || popup.url().startsWith("chrome-error")).toBe(true);
+  await popup.close();
 
-  await page.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(page.locator(".editor-overlay")).toHaveCount(0, { timeout: 30_000 });
+  await expect(page.locator(".toast")).toContainText("Image copied");
+  const types = await page.evaluate(async () => (await navigator.clipboard.read())[0]?.types ?? []);
+  expect(types).toContain("image/png");
 
-  await expect.poll(async () => (await storedImage(page)).original !== undefined).toBe(true);
-  const after = await storedImage(page);
-  // The export replaces the displayed image, the scene is kept for a later edit, and the
-  // image as pasted is kept so reopening does not composite on top of the last pass.
-  expect(after.dataUrl).not.toBe(before);
-  expect(after.original).toBe(before);
-  expect(JSON.parse(after.scene)).toHaveLength(1);
-
-  await page.getByRole("button", { name: /Open this image in Excalidraw/ }).click();
-  await expect(page.locator(".excalidraw")).toBeVisible({ timeout: 30_000 });
-  await page.getByRole("button", { name: "Cancel" }).click();
+  // Nothing is embedded any more: no editor opens in the notebook itself.
   await expect(page.locator(".editor-overlay")).toHaveCount(0);
+});
+
+test("the annotator uses Excalidraw's tool keys", async ({ page }) => {
+  await pasteImage(page);
+  await page.getByRole("button", { name: /Draw arrows and boxes/ }).click();
+  const active = page.locator(".editor-bar button[aria-pressed='true']:not(.swatch)");
+
+  for (const [key, label] of [
+    ["r", "Box"],
+    ["2", "Box"],
+    ["o", "Ellipse"],
+    ["l", "Line"],
+    ["p", "Draw"],
+    ["t", "Text"],
+    ["8", "Text"],
+    ["a", "Arrow"],
+    ["5", "Arrow"],
+  ] as const) {
+    await page.keyboard.press(key);
+    await expect(active, `key ${key} should select ${label}`).toContainText(label);
+  }
+
+  // A bare letter typed at the editor must not reach the notebook's own shortcuts behind it.
+  await expect(page.locator("pre.raw")).toHaveCount(0);
+  await expect(page.locator(".editor-overlay")).toBeVisible();
+});
+
+test("double-clicking drops a text label, and Ctrl+Z / Ctrl+Shift+Z step through it", async ({ page }) => {
+  await pasteImage(page);
+  await page.getByRole("button", { name: /Draw arrows and boxes/ }).click();
+  const box = (await page.locator(".annotation-layer.editing").boundingBox())!;
+
+  await page.mouse.dblclick(box.x + 60, box.y + 40);
+  await page.locator("#annotation-text").fill("retry this job");
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".annotation-layer.editing text")).toHaveText("retry this job");
+
+  await page.keyboard.press("Control+z");
+  await expect(page.locator(".annotation-layer.editing text")).toHaveCount(0);
+  await page.keyboard.press("Control+Shift+z");
+  await expect(page.locator(".annotation-layer.editing text")).toHaveCount(1);
+
+  // Escape while typing abandons the label rather than the whole editor.
+  await page.mouse.dblclick(box.x + 90, box.y + 70);
+  await page.locator("#annotation-text").fill("never mind");
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#annotation-text")).toHaveCount(0);
+  await expect(page.locator(".editor-overlay")).toBeVisible();
+  await expect(page.locator(".annotation-layer.editing text")).toHaveCount(1);
+
+  // Ctrl+Enter saves, like committing an entry.
+  await page.keyboard.press("Control+Enter");
+  await expect(page.locator(".editor-overlay")).toHaveCount(0);
+  await expect(page.locator("section.cell .annotation-layer text")).toHaveCount(1);
+});
+
+test("freehand strokes are stored as a path", async ({ page }) => {
+  await pasteImage(page);
+  await page.getByRole("button", { name: /Draw arrows and boxes/ }).click();
+  const box = (await page.locator(".annotation-layer.editing").boundingBox())!;
+
+  await page.keyboard.press("p");
+  await page.mouse.move(box.x + 30, box.y + 60);
+  await page.mouse.down();
+  for (let i = 1; i <= 10; i += 1) await page.mouse.move(box.x + 30 + i * 8, box.y + 60 + i * 3);
+  await page.mouse.up();
+
+  await expect(page.locator(".annotation-layer.editing polyline")).toHaveCount(1);
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+
+  const stored = await storedImage(page);
+  expect(stored.annotations).toHaveLength(1);
+  expect((stored.annotations as unknown as { kind: string; points: number[][] }[])[0].kind).toBe("freedraw");
+  expect(
+    (stored.annotations as unknown as { kind: string; points: number[][] }[])[0].points.length,
+  ).toBeGreaterThan(2);
 });
 
 /* ------------------------------------------------------------ ADO URL paste */

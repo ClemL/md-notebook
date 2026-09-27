@@ -1100,6 +1100,7 @@ function NotebookInner() {
             })()}
             onSelect={() => setSelectedId(cell.id)}
             onImageChange={(image) => updateImage(cell.id, image)}
+            onNotify={(message) => say(message)}
             onToggleRaw={() => setRawIds((prev) => ({ ...prev, [cell.id]: !prev[cell.id] }))}
             onSplit={(caret) => splitCell(cell.id, caret)}
             onMerge={() => mergeWithNext(cell.id)}

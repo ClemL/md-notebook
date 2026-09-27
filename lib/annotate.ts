@@ -7,7 +7,7 @@
  * the image is flattened for the clipboard.
  */
 
-export type ShapeKind = "arrow" | "rect" | "ellipse" | "text";
+export type ShapeKind = "arrow" | "line" | "rect" | "ellipse" | "freedraw" | "text";
 
 export type Shape = {
   id: string;
@@ -19,6 +19,8 @@ export type Shape = {
   y2: number;
   color: string;
   text?: string;
+  /** Freehand strokes only: the sampled path, in image coordinates. */
+  points?: [number, number][];
 };
 
 export const ANNOTATION_COLORS = ["#ff5c5c", "#ffc93c", "#7cc4ff", "#8ce0a6", "#f2f5f9"] as const;
@@ -65,7 +67,13 @@ export function arrowHeadSize(imageWidth: number): number {
 /** A shape too small to see is a stray tap, not an annotation. */
 export function isMeaningful(s: Shape): boolean {
   if (s.kind === "text") return !!s.text?.trim();
+  if (s.kind === "freedraw") return (s.points?.length ?? 0) > 2;
   return Math.hypot(s.x2 - s.x1, s.y2 - s.y1) > 6;
+}
+
+/** Freehand path as SVG polyline points. */
+export function freedrawPoints(s: Shape): string {
+  return (s.points ?? []).map(([x, y]) => `${round(x)},${round(y)}`).join(" ");
 }
 
 export function pointsToPolygon(points: [number, number][]): string {
@@ -93,6 +101,22 @@ export function drawShapes(
     ctx.lineWidth = width;
 
     switch (s.kind) {
+      case "line": {
+        ctx.beginPath();
+        ctx.moveTo(s.x1, s.y1);
+        ctx.lineTo(s.x2, s.y2);
+        ctx.stroke();
+        break;
+      }
+      case "freedraw": {
+        const points = s.points ?? [];
+        if (points.length < 2) break;
+        ctx.beginPath();
+        ctx.moveTo(points[0][0], points[0][1]);
+        for (const [x, y] of points.slice(1)) ctx.lineTo(x, y);
+        ctx.stroke();
+        break;
+      }
       case "arrow": {
         ctx.beginPath();
         ctx.moveTo(s.x1, s.y1);

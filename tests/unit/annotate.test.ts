@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   arrowHead,
+  freedrawPoints,
   arrowHeadSize,
   fontSize,
   isMeaningful,
@@ -93,5 +94,21 @@ describe("isMeaningful", () => {
 describe("pointsToPolygon", () => {
   it("formats and rounds for SVG", () => {
     expect(pointsToPolygon([[1.234, 2], [3, 4.567]])).toBe("1.2,2 3,4.6");
+  });
+});
+
+describe("freehand and line shapes", () => {
+  it("needs more than a couple of points to count", () => {
+    expect(isMeaningful(shape({ kind: "freedraw", points: [[0, 0], [1, 1]] }))).toBe(false);
+    expect(isMeaningful(shape({ kind: "freedraw", points: [[0, 0], [5, 5], [9, 9]] }))).toBe(true);
+  });
+
+  it("formats a path for SVG", () => {
+    expect(freedrawPoints(shape({ kind: "freedraw", points: [[1.26, 2], [3, 4]] }))).toBe("1.3,2 3,4");
+  });
+
+  it("treats a line like any other drag for the stray-tap check", () => {
+    expect(isMeaningful(shape({ kind: "line", x2: 3, y2: 1 }))).toBe(false);
+    expect(isMeaningful(shape({ kind: "line" }))).toBe(true);
   });
 });
