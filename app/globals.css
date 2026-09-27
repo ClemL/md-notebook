@@ -1153,3 +1153,36 @@ button.swatch.on {
     display: none;
   }
 }
+
+/* ---------- inline image editing ---------- */
+
+.editor-inline {
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  overflow: hidden;
+  margin: 12px 0;
+  background: #0c0f14;
+}
+
+.editor-inline .editor-bar {
+  padding: 6px 8px;
+  gap: 4px;
+}
+
+.editor-inline .editor-bar button {
+  font-size: 11px;
+  padding: 4px 8px;
+}
+
+.editor-inline .editor-stage {
+  padding: 10px;
+  max-height: 60vh;
+}
+
+.editor-inline .editor-canvas {
+  margin: 0 auto;
+}
+
+.editor-inline .editor-title {
+  font-size: 12px;
+}

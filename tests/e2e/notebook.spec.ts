@@ -1037,13 +1037,12 @@ test("the annotator uses Excalidraw's tool keys", async ({ page }) => {
   for (const [key, label] of [
     ["r", "Box"],
     ["2", "Box"],
-    ["o", "Ellipse"],
-    ["l", "Line"],
-    ["p", "Draw"],
-    ["t", "Text"],
-    ["8", "Text"],
     ["a", "Arrow"],
     ["5", "Arrow"],
+    ["l", "Line"],
+    ["6", "Line"],
+    ["t", "Text"],
+    ["8", "Text"],
   ] as const) {
     await page.keyboard.press(key);
     await expect(active, `key ${key} should select ${label}`).toContainText(label);
@@ -1052,6 +1051,12 @@ test("the annotator uses Excalidraw's tool keys", async ({ page }) => {
   // A bare letter typed at the editor must not reach the notebook's own shortcuts behind it.
   await expect(page.locator("pre.raw")).toHaveCount(0);
   await expect(page.locator(".editor-overlay")).toBeVisible();
+
+  // Only the four tools are offered; the rest are left to Excalidraw.
+  const tools = await page
+    .locator(".editor-bar button[aria-pressed]:not(.swatch)")
+    .allTextContents();
+  expect(tools.map((t) => t.trim().split(" ")[0])).toEqual(["Box", "Arrow", "Line", "Text"]);
 });
 
 test("double-clicking drops a text label, and Ctrl+Z / Ctrl+Shift+Z step through it", async ({ page }) => {
@@ -1083,26 +1088,60 @@ test("double-clicking drops a text label, and Ctrl+Z / Ctrl+Shift+Z step through
   await expect(page.locator("section.cell .annotation-layer text")).toHaveCount(1);
 });
 
-test("freehand strokes are stored as a path", async ({ page }) => {
+test("Edit inline marks the image up inside the entry", async ({ page }) => {
   await pasteImage(page);
-  await page.getByRole("button", { name: /Draw arrows and boxes/ }).click();
+  await page.getByRole("button", { name: /Mark the image up inside this entry/ }).click();
+
+  // In the entry, not over the whole window, and in place of the thumbnail.
+  await expect(page.locator("section.cell .editor-inline")).toHaveCount(1);
+  await expect(page.locator(".editor-overlay")).toHaveCount(0);
+  await expect(page.locator("section.cell button.thumb")).toHaveCount(0);
+
   const box = (await page.locator(".annotation-layer.editing").boundingBox())!;
-
-  await page.keyboard.press("p");
-  await page.mouse.move(box.x + 30, box.y + 60);
+  await page.keyboard.press("2");
+  await page.mouse.move(box.x + 20, box.y + 20);
   await page.mouse.down();
-  for (let i = 1; i <= 10; i += 1) await page.mouse.move(box.x + 30 + i * 8, box.y + 60 + i * 3);
+  await page.mouse.move(box.x + 120, box.y + 90, { steps: 6 });
   await page.mouse.up();
+  await page.keyboard.press("Control+Enter");
 
-  await expect(page.locator(".annotation-layer.editing polyline")).toHaveCount(1);
-  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.locator(".editor-inline")).toHaveCount(0);
+  await expect(page.locator("section.cell button.thumb")).toHaveCount(1);
+  await expect(page.locator("section.cell .annotation-layer rect")).toHaveCount(1);
 
-  const stored = await storedImage(page);
-  expect(stored.annotations).toHaveLength(1);
-  expect((stored.annotations as unknown as { kind: string; points: number[][] }[])[0].kind).toBe("freedraw");
-  expect(
-    (stored.annotations as unknown as { kind: string; points: number[][] }[])[0].points.length,
-  ).toBeGreaterThan(2);
+  // The button toggles, and cancelling leaves the entry as it was.
+  await page.getByRole("button", { name: /Mark the image up inside this entry/ }).click();
+  await expect(page.locator(".editor-inline")).toHaveCount(1);
+  await page.getByRole("button", { name: /Mark the image up inside this entry/ }).click();
+  await expect(page.locator(".editor-inline")).toHaveCount(0);
+  await expect(page.locator("section.cell .annotation-layer rect")).toHaveCount(1);
+});
+
+test("annotations drawn by an older version still render", async ({ page }) => {
+  await pasteImage(page);
+  // Ellipse and freehand were dropped from the palette; anything already drawn must survive.
+  await page.evaluate(() => {
+    const cells = JSON.parse(localStorage.getItem("md-notebook:v2")!);
+    cells[0].image.annotations = [
+      { id: "a", kind: "ellipse", x1: 20, y1: 20, x2: 200, y2: 160, color: "#ffc93c" },
+      {
+        id: "b",
+        kind: "freedraw",
+        x1: 0,
+        y1: 0,
+        x2: 0,
+        y2: 0,
+        color: "#8ce0a6",
+        points: [[10, 300], [60, 320], [120, 300]],
+      },
+    ];
+    localStorage.setItem("md-notebook:v2", JSON.stringify(cells));
+  });
+  await page.reload();
+  await ready(page);
+
+  await expect(page.locator("section.cell .annotation-layer ellipse")).toHaveCount(1);
+  await expect(page.locator("section.cell .annotation-layer polyline")).toHaveCount(1);
 });
 
 /* ------------------------------------------------------------ ADO URL paste */

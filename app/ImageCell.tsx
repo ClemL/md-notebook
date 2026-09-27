@@ -41,7 +41,7 @@ export default function ImageCell({
   onNotify: (message: string) => void;
 }) {
   const [zoomed, setZoomed] = useState(false);
-  const [editor, setEditor] = useState<"none" | "draw">("none");
+  const [editor, setEditor] = useState<"none" | "draw" | "inline">("none");
   const image = cell.image!;
   const marked = !!image.annotations?.length;
 
@@ -102,6 +102,13 @@ export default function ImageCell({
           Draw{marked ? ` (${image.annotations!.length})` : ""}
         </Btn>
         <Btn
+          tip="Mark the image up inside this entry, without leaving the notebook"
+          onClick={() => setEditor((e) => (e === "inline" ? "none" : "inline"))}
+          aria-pressed={editor === "inline"}
+        >
+          Edit inline
+        </Btn>
+        <Btn
           tip="Copy the image and open Excalidraw in a new window — paste it there with Ctrl+V"
           onClick={openInExcalidraw}
         >
@@ -120,11 +127,23 @@ export default function ImageCell({
       </div>
 
       <div className="cell-body" hidden={collapsed}>
+        {editor === "inline" ? (
+          <Annotator
+            image={image}
+            variant="inline"
+            onCancel={() => setEditor("none")}
+            onSave={(shapes: Shape[]) => {
+              onImageChange({ ...image, annotations: shapes.length ? shapes : undefined });
+              setEditor("none");
+            }}
+          />
+        ) : (
         <button className="thumb" onClick={() => setZoomed(true)} title="Click to view full size">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={image.dataUrl} alt={image.name ?? `Pasted image ${formatStamp(image.addedAt)}`} />
           <AnnotationLayer image={image} />
         </button>
+        )}
       </div>
 
       {editor === "draw" && (

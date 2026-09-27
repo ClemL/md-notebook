@@ -17,13 +17,15 @@ import {
 } from "@/lib/annotate";
 import type { StoredImage } from "@/lib/image";
 
-/** Excalidraw's own tool keys, so the muscle memory carries over. */
+/**
+ * Excalidraw's own tool keys, so the muscle memory carries over. Deliberately a subset:
+ * ellipse, freehand, diamond and the rest are left to Excalidraw itself. Shapes of those
+ * kinds still render if an older annotation holds them; they just cannot be drawn here.
+ */
 const TOOLS: { kind: ShapeKind; label: string; keys: string[] }[] = [
+  { kind: "rect", label: "Box", keys: ["r", "2"] },
   { kind: "arrow", label: "Arrow", keys: ["a", "5"] },
   { kind: "line", label: "Line", keys: ["l", "6"] },
-  { kind: "rect", label: "Box", keys: ["r", "2"] },
-  { kind: "ellipse", label: "Ellipse", keys: ["o", "4"] },
-  { kind: "freedraw", label: "Draw", keys: ["p", "7"] },
   { kind: "text", label: "Text", keys: ["t", "8"] },
 ];
 
@@ -146,13 +148,17 @@ export function AnnotationLayer({ image }: { image: StoredImage }) {
  */
 export default function Annotator({
   image,
+  variant = "overlay",
   onSave,
   onCancel,
 }: {
   image: StoredImage;
+  /** "overlay" fills the window; "inline" edits in place inside the entry. */
+  variant?: "overlay" | "inline";
   onSave: (shapes: Shape[]) => void;
   onCancel: () => void;
 }) {
+  const inline = variant === "inline";
   const [shapes, setShapes] = useState<Shape[]>(image.annotations ?? []);
   const [undone, setUndone] = useState<Shape[]>([]);
   const [draft, setDraft] = useState<Shape | null>(null);
@@ -321,9 +327,14 @@ export default function Annotator({
   };
 
   return (
-    <div className="editor-overlay" role="dialog" aria-modal="true" aria-label="Annotate image">
+    <div
+      className={inline ? "editor-inline" : "editor-overlay"}
+      role={inline ? "group" : "dialog"}
+      aria-modal={inline ? undefined : true}
+      aria-label={inline ? "Annotate image inline" : "Annotate image"}
+    >
       <div className="editor-bar">
-        <span className="editor-title">Draw</span>
+        <span className="editor-title">{inline ? "Edit" : "Draw"}</span>
         {TOOLS.map((t) => (
           <button
             key={t.kind}

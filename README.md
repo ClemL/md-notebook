@@ -145,11 +145,15 @@ Every button's tooltip names its shortcut. Outside a text box the notebook is in
 
 Two buttons on an image entry, for two different needs:
 
-- **Draw** — the built-in annotator: arrows, lines, boxes, ellipses, freehand and text labels in
-  five colours. Tool keys are Excalidraw's own (`a`/`5` arrow, `l`/`6` line, `r`/`2` box, `o`/`4`
-  ellipse, `p`/`7` freehand, `t`/`8` text), with `Ctrl+Z` / `Ctrl+Shift+Z` to step through,
-  `Ctrl+Enter` to save and `Esc` to cancel. **Double-click anywhere to drop a text label**, as in
-  Excalidraw; `Esc` while typing abandons the label rather than the editor.
+- **Draw** — the built-in annotator, full screen: boxes, arrows, lines and text labels in five
+  colours. Tool keys are Excalidraw's own — `r`/`2` box, `a`/`5` arrow, `l`/`6` line, `t`/`8` text
+  — with `Ctrl+Z` / `Ctrl+Shift+Z` to step through, `Ctrl+Enter` to save and `Esc` to cancel.
+  **Double-click anywhere to drop a text label**, as in Excalidraw; `Esc` while typing abandons
+  the label rather than the editor. The palette stops there on purpose: ellipse, freehand, diamond
+  and the rest are what Excalidraw is for. Annotations drawn by an earlier version still render.
+
+- **Edit inline** — the same editor, in place inside the entry rather than over the window, for a
+  quick box without losing sight of the notebook. The button toggles it.
 
   Shapes are stored *beside* the pixels and drawn as an SVG overlay, so the screenshot itself is
   never modified, an annotation can be removed later, and the markup stays crisp at any zoom — a
