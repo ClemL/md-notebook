@@ -5,6 +5,7 @@ import Btn from "./Btn";
 import MarkdownView from "./MarkdownView";
 import ImageCell from "./ImageCell";
 import { Cell, formatStamp, isImageCell } from "@/lib/markdown";
+import type { StoredImage } from "@/lib/image";
 import { continueListOnEnter, insertAt, isUrl, wrapSelectionAsLink } from "@/lib/editor";
 import { htmlIsWorthConverting, htmlToMarkdown } from "@/lib/richPaste";
 import { maybeTable } from "@/lib/table";
@@ -34,6 +35,7 @@ type Props = {
   onSend: () => void;
   onDelete: () => void;
   onMove: (delta: -1 | 1) => void;
+  onImageChange: (next: StoredImage) => void;
   onToggleRaw: () => void;
   onToggleCollapse: () => void;
   onSplit: (caret: number) => void;
@@ -67,6 +69,7 @@ export default function CellView({
   onSend,
   onDelete,
   onMove,
+  onImageChange,
   onToggleRaw,
   onToggleCollapse,
   onSplit,
@@ -214,6 +217,7 @@ export default function CellView({
         onSelect={onSelect}
         onCopy={onCopy}
         onDelete={onDelete}
+        onImageChange={onImageChange}
       />
     );
   }

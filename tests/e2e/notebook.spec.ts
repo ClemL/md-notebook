@@ -464,6 +464,27 @@ async function pasteImage(page: Page) {
     dt.items.add(file);
     document.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
   });
+  // Storing an image is asynchronous (decode, downscale, encode) and the save effect runs after
+  // that, so wait for it to land rather than racing it.
+  await expect(page.locator("section.cell.image-cell")).toHaveCount(1);
+  await storedImage(page);
+}
+
+/** The first image entry as it sits in storage, once it is actually there. */
+async function storedImage(page: Page): Promise<Record<string, string>> {
+  const read = () =>
+    page.evaluate(() => {
+      try {
+        const cells: { image?: { dataUrl?: string } }[] = JSON.parse(
+          localStorage.getItem("md-notebook:v2") ?? "[]",
+        );
+        return cells.find((c) => c.image?.dataUrl)?.image ?? null;
+      } catch {
+        return null;
+      }
+    });
+  await expect.poll(async () => ((await read())?.dataUrl?.length ?? 0)).toBeGreaterThan(0);
+  return (await read()) as unknown as Record<string, string>;
 }
 
 test("a pasted image becomes an image entry with copy and delete only", async ({ page }) => {
@@ -912,4 +933,106 @@ test.describe("dropdowns on a short screen", () => {
       await expect(menu).toHaveCount(0);
     }
   });
+});
+
+/* ------------------------------------------------------------ image editors */
+
+/** Drags a shape across the annotator canvas in image coordinates. */
+async function drag(page: Page, from: [number, number], to: [number, number]) {
+  const box = (await page.locator(".annotation-layer.editing").boundingBox())!;
+  await page.mouse.move(box.x + from[0], box.y + from[1]);
+  await page.mouse.down();
+  await page.mouse.move(box.x + to[0], box.y + to[1], { steps: 8 });
+  await page.mouse.up();
+}
+
+test("the built-in annotator stores shapes beside the image, not in it", async ({ page }) => {
+  await pasteImage(page);
+  const before = (await storedImage(page)).dataUrl;
+
+  await page.getByRole("button", { name: /Draw arrows and boxes/ }).click();
+  await expect(page.locator(".annotation-layer.editing")).toBeVisible();
+
+  await drag(page, [10, 10], [80, 50]);
+  await page.getByRole("button", { name: "Box", exact: true }).click();
+  await drag(page, [20, 30], [90, 60]);
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+
+  // Rendered over the thumbnail, and the pixels are untouched.
+  await expect(page.locator("section.cell .annotation-layer")).toHaveCount(1);
+  await expect(page.locator("section.cell .annotation-layer line")).toHaveCount(1);
+  await expect(page.locator("section.cell .annotation-layer rect")).toHaveCount(1);
+  await expect(page.getByRole("button", { name: /arrows and boxes/ })).toHaveText("Draw (2)");
+
+  const after = await storedImage(page);
+  expect(after.dataUrl).toBe(before);
+  expect(after.annotations).toHaveLength(2);
+
+  // The whole edit is one undo step.
+  await page.keyboard.press("Control+z");
+  await expect(page.locator("section.cell .annotation-layer")).toHaveCount(0);
+  await page.keyboard.press("Control+Shift+z");
+  await expect(page.locator("section.cell .annotation-layer line")).toHaveCount(1);
+
+  // And it survives a reload (undo history does not, by design).
+  await page.reload();
+  await ready(page);
+  await expect(page.locator("section.cell .annotation-layer line")).toHaveCount(1);
+  await expect(page.locator("section.cell .annotation-layer rect")).toHaveCount(1);
+});
+
+test("annotations can be undone, cleared and cancelled inside the editor", async ({ page }) => {
+  await pasteImage(page);
+  await page.getByRole("button", { name: /Draw arrows and boxes/ }).click();
+  await drag(page, [10, 10], [80, 50]);
+  await drag(page, [20, 20], [70, 60]);
+  await expect(page.locator(".annotation-layer.editing line")).toHaveCount(2);
+
+  // Scoped to the editor: the paste toast carries an Undo button of its own.
+  const editor = page.getByRole("dialog", { name: "Annotate image" });
+  await editor.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(page.locator(".annotation-layer.editing line")).toHaveCount(1);
+  await editor.getByRole("button", { name: "Clear" }).click();
+  await expect(page.locator(".annotation-layer.editing line")).toHaveCount(0);
+
+  await drag(page, [10, 10], [80, 50]);
+  await editor.getByRole("button", { name: "Cancel" }).click();
+  await expect(page.locator(".editor-overlay")).toHaveCount(0);
+  await expect(page.locator("section.cell .annotation-layer")).toHaveCount(0);
+});
+
+test("a stray tap does not become an annotation", async ({ page }) => {
+  await pasteImage(page);
+  await page.getByRole("button", { name: /Draw arrows and boxes/ }).click();
+  await drag(page, [40, 40], [42, 41]);
+  await expect(page.locator(".annotation-layer.editing line")).toHaveCount(0);
+  await page.getByRole("button", { name: "Cancel" }).click();
+});
+
+test("Excalidraw opens on the image and saves back a flattened export", async ({ page }) => {
+  test.slow();
+  await pasteImage(page);
+  const before = (await storedImage(page)).dataUrl;
+
+  await page.getByRole("button", { name: /Open this image in Excalidraw/ }).click();
+  await expect(page.locator(".excalidraw")).toBeVisible({ timeout: 30_000 });
+  // Fonts come from the copy in public/, not a CDN, so the offline build works too.
+  expect(await page.evaluate(() => (window as never as { EXCALIDRAW_ASSET_PATH: string }).EXCALIDRAW_ASSET_PATH))
+    .toContain("/excalidraw-assets/");
+
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.locator(".editor-overlay")).toHaveCount(0, { timeout: 30_000 });
+
+  await expect.poll(async () => (await storedImage(page)).original !== undefined).toBe(true);
+  const after = await storedImage(page);
+  // The export replaces the displayed image, the scene is kept for a later edit, and the
+  // image as pasted is kept so reopening does not composite on top of the last pass.
+  expect(after.dataUrl).not.toBe(before);
+  expect(after.original).toBe(before);
+  expect(JSON.parse(after.scene)).toHaveLength(1);
+
+  await page.getByRole("button", { name: /Open this image in Excalidraw/ }).click();
+  await expect(page.locator(".excalidraw")).toBeVisible({ timeout: 30_000 });
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await expect(page.locator(".editor-overlay")).toHaveCount(0);
 });

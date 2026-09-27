@@ -979,3 +979,140 @@ button.collapse-toggle {
     display: none;
   }
 }
+
+/* ---------- annotations over an image ---------- */
+
+button.thumb,
+.lightbox-frame {
+  position: relative;
+}
+
+.lightbox-frame {
+  display: flex;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.lightbox-frame img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+/* Sits exactly over the image it annotates, scaling with it. */
+.annotation-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.annotation-layer.editing {
+  pointer-events: auto;
+  touch-action: none;
+  cursor: crosshair;
+}
+
+/* ---------- image editors (built-in and Excalidraw) ---------- */
+
+.editor-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  background: rgba(8, 10, 14, 0.96);
+}
+
+.editor-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel-2);
+}
+
+.editor-title {
+  font-weight: 600;
+  margin-right: 6px;
+}
+
+.editor-error {
+  color: var(--danger);
+  font-size: 12px;
+}
+
+.editor-stage {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  min-height: 0;
+  overflow: auto;
+}
+
+.editor-canvas {
+  position: relative;
+  max-width: 100%;
+  max-height: 100%;
+  display: flex;
+}
+
+.editor-canvas img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  user-select: none;
+}
+
+.editor-loading {
+  color: var(--fg-dim);
+  font-size: 13px;
+}
+
+/* Excalidraw brings its own chrome and wants the whole area. */
+.excalidraw-stage {
+  padding: 0;
+  display: block;
+  overflow: hidden;
+}
+
+.excalidraw-stage .excalidraw,
+.excalidraw-stage > div {
+  width: 100%;
+  height: 100%;
+}
+
+.swatches {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: 4px;
+}
+
+button.swatch {
+  width: 22px;
+  height: 22px;
+  min-height: 0;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid transparent;
+}
+
+button.swatch.on {
+  border-color: var(--fg);
+  box-shadow: 0 0 0 2px var(--panel-2);
+}
+
+@media (hover: none) {
+  button.swatch {
+    width: 30px;
+    height: 30px;
+    min-height: 0;
+  }
+}

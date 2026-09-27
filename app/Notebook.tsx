@@ -26,7 +26,13 @@ import {
   writeClipboard,
 } from "@/lib/markdown";
 import { mergeTexts, splitAt } from "@/lib/editor";
-import { copyImage, imageFromTransfer, readClipboardImage, storeImage } from "@/lib/image";
+import {
+  copyImage,
+  imageFromTransfer,
+  readClipboardImage,
+  storeImage,
+  type StoredImage,
+} from "@/lib/image";
 import { maybeTable } from "@/lib/table";
 import { readClipboardSmart } from "@/lib/richPaste";
 import { receiveCode, sendEntries } from "@/lib/transferClient";
@@ -484,6 +490,16 @@ function NotebookInner() {
     mutate((prev) => prev.map((c) => ({ ...c, text: toCheckboxes(c.text), updatedAt: Date.now() })));
     say("Every line in every entry is now a task.");
   }, [mutate, say]);
+
+  const updateImage = useCallback(
+    (id: string, image: StoredImage) => {
+      mutate((prev) =>
+        prev.map((c) => (c.id === id ? { ...c, image, updatedAt: Date.now() } : c)),
+      );
+      say("Image updated.", { label: "Undo", run: () => undoRef.current() });
+    },
+    [mutate, say],
+  );
 
   const toggleTask = useCallback(
     (id: string, line: number) => {
@@ -1083,6 +1099,7 @@ function NotebookInner() {
               return !!next && !isImageCell(cell) && !isImageCell(next);
             })()}
             onSelect={() => setSelectedId(cell.id)}
+            onImageChange={(image) => updateImage(cell.id, image)}
             onToggleRaw={() => setRawIds((prev) => ({ ...prev, [cell.id]: !prev[cell.id] }))}
             onSplit={(caret) => splitCell(cell.id, caret)}
             onMerge={() => mergeWithNext(cell.id)}

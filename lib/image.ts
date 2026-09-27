@@ -11,7 +11,15 @@ export type StoredImage = {
   bytes: number;
   addedAt: number;
   name?: string;
+  /** Built-in annotator shapes, kept beside the pixels rather than painted into them. */
+  annotations?: Shape[];
+  /** Excalidraw scene elements, so a drawing can be reopened and refined. */
+  scene?: string;
+  /** The image as pasted, kept when Excalidraw replaced dataUrl with its export. */
+  original?: string;
 };
+
+import { drawShapes, type Shape } from "./annotate";
 
 const MAX_EDGE = [1400, 1000, 700, 500];
 const BUDGET_BYTES = 1_200_000;
@@ -67,6 +75,41 @@ export async function storeImage(blob: Blob, name?: string): Promise<StoredImage
   };
 }
 
+/** Loads a data URL into an <img>, for compositing. */
+function loadDataUrl(dataUrl: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("The stored image could not be decoded."));
+    img.src = dataUrl;
+  });
+}
+
+/**
+ * The image with its annotations painted on, for the clipboard. Annotations are only ever
+ * flattened on the way out; what is stored keeps them separate and removable.
+ */
+export async function flattenAnnotations(image: StoredImage): Promise<Blob> {
+  if (!image.annotations?.length) return dataUrlToBlob(image.dataUrl);
+
+  const img = await loadDataUrl(image.dataUrl);
+  const canvas = document.createElement("canvas");
+  canvas.width = image.width;
+  canvas.height = image.height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return dataUrlToBlob(image.dataUrl);
+
+  ctx.drawImage(img, 0, 0, image.width, image.height);
+  drawShapes(ctx, image.annotations, image.width);
+
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => (blob ? resolve(blob) : reject(new Error("The image could not be flattened."))),
+      "image/png",
+    );
+  });
+}
+
 export function dataUrlToBlob(dataUrl: string): Blob {
   const [header, payload] = dataUrl.split(",");
   const type = header.match(/data:([^;]+)/)?.[1] ?? "image/png";
@@ -77,7 +120,7 @@ export function dataUrlToBlob(dataUrl: string): Blob {
 }
 
 export async function copyImage(image: StoredImage): Promise<void> {
-  const blob = dataUrlToBlob(image.dataUrl);
+  const blob = await flattenAnnotations(image);
   if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") {
     throw new Error("This browser cannot write images to the clipboard.");
   }
