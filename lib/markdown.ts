@@ -17,7 +17,8 @@ export type Backup = {
 
 import type { ImageView, StoredImage } from "./image";
 
-const IMAGE_VIEWS: readonly ImageView[] = ["thumb", "width", "height", "original"];
+// A view no longer offered (an earlier "height") falls back to the thumbnail.
+const IMAGE_VIEWS: readonly ImageView[] = ["thumb", "width", "original"];
 
 export const STORAGE_KEY = "md-notebook:v2";
 const LEGACY_KEY = "md-notebook:v1";

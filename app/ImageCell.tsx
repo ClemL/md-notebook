@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Annotator, { AnnotationLayer } from "./Annotator";
 import Btn from "./Btn";
 import { Cell, formatStamp } from "@/lib/markdown";
-import { copyImage, type ImageView, type StoredImage } from "@/lib/image";
+import { copyImage, formatBytes, type ImageView, type StoredImage } from "@/lib/image";
 import type { Shape } from "@/lib/annotate";
 
 /** Where the Excalidraw button sends you. A self-hosted instance can be swapped in here. */
@@ -14,7 +14,6 @@ export const EXCALIDRAW_URL = "https://excalidraw.com/";
 const VIEWS: { view: ImageView; label: string; tip: string }[] = [
   { view: "thumb", label: "Thumb", tip: "Show a small thumbnail" },
   { view: "width", label: "Fit W", tip: "Fit the image to the width of the entry" },
-  { view: "height", label: "Fit H", tip: "Fit the image to the height of the window" },
   { view: "original", label: "1:1", tip: "Show the image at its original size" },
 ];
 
@@ -62,7 +61,10 @@ export default function ImageCell({
   onNotify: (message: string) => void;
 }) {
   const [zoomed, setZoomed] = useState(false);
+  // Editing starts inline, in the entry; the full-window editor is one click away from there and
+  // carries over whatever has been drawn so far.
   const [editor, setEditor] = useState<"none" | "draw" | "inline">("none");
+  const [draft, setDraft] = useState<Shape[] | null>(null);
   const image = cell.image!;
   const marked = !!image.annotations?.length;
   const view = image.view ?? "thumb";
@@ -115,17 +117,18 @@ export default function ImageCell({
           {collapsed ? "▸" : "▾"}
         </Btn>
         <Btn
-          tip={marked ? "Edit the arrows and boxes on this image" : "Draw arrows and boxes on this image"}
-          onClick={() => setEditor("draw")}
+          tip={
+            marked
+              ? `Edit the ${image.annotations!.length} arrows and boxes on this image, in the entry`
+              : "Mark the image up with boxes, arrows and text, in the entry"
+          }
+          onClick={() => {
+            setDraft(null);
+            setEditor((e) => (e === "none" ? "inline" : "none"));
+          }}
+          aria-pressed={editor !== "none"}
         >
-          Draw{marked ? ` (${image.annotations!.length})` : ""}
-        </Btn>
-        <Btn
-          tip="Mark the image up inside this entry, without leaving the notebook"
-          onClick={() => setEditor((e) => (e === "inline" ? "none" : "inline"))}
-          aria-pressed={editor === "inline"}
-        >
-          Edit inline
+          Edit
         </Btn>
         <Btn
           tip="Copy the image and open Excalidraw in a new window — paste it there with Ctrl+V"
@@ -156,6 +159,9 @@ export default function ImageCell({
           ))}
         </span>
         <span className="spacer" />
+        <span className="image-meta">
+          {image.width}×{image.height} · {formatBytes(image.bytes)}
+        </span>
         <span className="stamp" title={`Pasted ${formatStamp(image.addedAt)}`}>
           {formatStamp(image.addedAt)}
         </span>
@@ -176,6 +182,10 @@ export default function ImageCell({
             image={image}
             variant="inline"
             onCancel={() => setEditor("none")}
+            onExpand={(shapes: Shape[]) => {
+              setDraft(shapes);
+              setEditor("draw");
+            }}
             onSave={(shapes: Shape[]) => {
               onImageChange({ ...image, annotations: shapes.length ? shapes : undefined });
               setEditor("none");
@@ -199,6 +209,7 @@ export default function ImageCell({
       {editor === "draw" && (
         <Annotator
           image={image}
+          initialShapes={draft ?? undefined}
           onCancel={() => setEditor("none")}
           onSave={(shapes: Shape[]) => {
             onImageChange({ ...image, annotations: shapes.length ? shapes : undefined });

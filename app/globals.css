@@ -382,16 +382,16 @@ kbd {
 /* ---------- search ---------- */
 
 /*
- * The search box takes the free space in the header, up to 360px. Its basis is its minimum, so
- * as the window narrows it gives up width first, down to about a third of that, and only then
- * do the buttons after it wrap to a second line.
+ * The search box takes the free space in the header, up to 480px. Its basis is its minimum, so
+ * as the window narrows it gives up width first, down to 120px, and only then do the buttons
+ * after it wrap to a second line.
  */
 .search {
   position: relative;
   display: inline-flex;
   align-items: center;
   min-width: 120px;
-  max-width: 360px;
+  max-width: 480px;
   flex: 100 1 120px;
 }
 
@@ -689,10 +689,12 @@ button[data-flash="on"]:hover:not(:disabled) {
 
 /* ---------- image entries ---------- */
 
-.image-label {
+/* Dimensions and size, on the right just before the timestamp. */
+.image-meta {
   font-size: 11px;
   color: var(--fg-dim);
   margin-right: 4px;
+  white-space: nowrap;
 }
 
 .image-cell .cell-body {
@@ -965,6 +967,16 @@ button.collapse-toggle {
     order: 1;
     margin-left: auto;
   }
+
+  /* Keeps its place just before the timestamp when the toolbar wraps. */
+  .cell-head .image-meta {
+    order: 1;
+    margin-left: auto;
+  }
+
+  .cell-head .image-meta + .stamp {
+    margin-left: 0;
+  }
 }
 
 /* The cover screen of a folded phone: keep the chrome out of the way. */
@@ -994,7 +1006,8 @@ button.collapse-toggle {
     max-width: none;
   }
 
-  .cell-head .stamp {
+  .cell-head .stamp,
+  .cell-head .image-meta {
     display: none;
   }
 }
@@ -1228,25 +1241,16 @@ button.swatch.on {
   max-height: none;
 }
 
-.thumb-frame.view-height button.thumb img {
-  height: calc(100dvh - 140px);
-  width: auto;
-  max-width: none;
-  max-height: none;
-}
-
 .thumb-frame.view-original button.thumb img {
   max-width: none;
   max-height: none;
 }
 
-/* Fit height and 1:1 can be wider than the entry: scroll inside it rather than overflow it. */
-.thumb-frame.view-height,
+/* 1:1 can be wider than the entry: scroll inside it rather than overflow it. */
 .thumb-frame.view-original {
   overflow-x: auto;
 }
 
-.thumb-frame.view-height button.thumb,
 .thumb-frame.view-original button.thumb {
   max-width: none;
 }

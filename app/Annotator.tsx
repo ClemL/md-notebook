@@ -149,17 +149,23 @@ export function AnnotationLayer({ image }: { image: StoredImage }) {
 export default function Annotator({
   image,
   variant = "overlay",
+  initialShapes,
   onSave,
   onCancel,
+  onExpand,
 }: {
   image: StoredImage;
   /** "overlay" fills the window; "inline" edits in place inside the entry. */
   variant?: "overlay" | "inline";
+  /** Unsaved shapes carried over from another editor; defaults to the stored annotations. */
+  initialShapes?: Shape[];
   onSave: (shapes: Shape[]) => void;
   onCancel: () => void;
+  /** Inline only: move the work in progress to the full-window editor. */
+  onExpand?: (shapes: Shape[]) => void;
 }) {
   const inline = variant === "inline";
-  const [shapes, setShapes] = useState<Shape[]>(image.annotations ?? []);
+  const [shapes, setShapes] = useState<Shape[]>(initialShapes ?? image.annotations ?? []);
   const [undone, setUndone] = useState<Shape[]>([]);
   const [draft, setDraft] = useState<Shape | null>(null);
   const [tool, setTool] = useState<ShapeKind>("rect");
@@ -369,6 +375,11 @@ export default function Annotator({
         <button onClick={() => { setShapes([]); setUndone([]); }} disabled={!shapes.length}>
           Clear
         </button>
+        {inline && onExpand && (
+          <button onClick={() => onExpand(shapes)} title="Continue in a full-window editor">
+            Full screen ⤢
+          </button>
+        )}
         <button onClick={onCancel}>Cancel</button>
         <button className="primary" onClick={() => onSave(shapes)} title="Save (Ctrl+Enter)">
           Save
