@@ -162,7 +162,7 @@ export default function Annotator({
   const [shapes, setShapes] = useState<Shape[]>(image.annotations ?? []);
   const [undone, setUndone] = useState<Shape[]>([]);
   const [draft, setDraft] = useState<Shape | null>(null);
-  const [tool, setTool] = useState<ShapeKind>("arrow");
+  const [tool, setTool] = useState<ShapeKind>("rect");
   const [color, setColor] = useState<string>(ANNOTATION_COLORS[0]);
   const [typing, setTyping] = useState<{ x: number; y: number; value: string } | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);

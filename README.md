@@ -20,7 +20,7 @@ and a serverless function, and the app runs fine with it unconfigured.
 ### Entries
 
 - **Blur to render.** Leaving a text box renders it; `Esc` or `Ctrl+Enter` commits without clicking away.
-- **+ Paste New.** Creates an entry, drops the clipboard into it, and focuses the text box. Rich
+- **+ Paste.** Creates an entry, drops the clipboard into it, and focuses the text box. Rich
   clipboard content (Teams, Confluence, a web page) is converted to markdown; plain text is left
   alone. If the browser blocks clipboard reads, the entry is still created and focused so `Ctrl+V`
   works — and pasting into an open entry converts rich content the same way.
@@ -53,8 +53,12 @@ and a serverless function, and the app runs fine with it unconfigured.
 - **Duplicate detection.** Pasting a string that already exists verbatim jumps to that entry and
   says so instead of creating a twin; the toast offers *Add anyway*.
 - **Images.** Paste or drop a screenshot anywhere to store it as an image entry: a thumbnail that
-  opens full size on click, with its dimensions, size and paste time in the header. It can be
-  copied back to the clipboard as PNG, deleted, and marked up two ways (below). Images are re-encoded as PNG and
+  opens full size on click, with its paste time in the header. It can be copied back to the
+  clipboard as PNG, deleted, moved up and down, and marked up two ways (below); the annotator opens
+  on the box tool. **Thumb / Fit W / Fit H / 1:1** choose how it shows: a small thumbnail (the
+  default), the width of the entry, the height of the window, or its original pixels, scrolling
+  sideways when wider than the entry. The choice is saved with the image but is not an undo step.
+  In compact mode the Excalidraw button reads **Xcd ↗**. Images are re-encoded as PNG and
   downscaled until they fit a per-image budget, because the whole notebook shares a few megabytes of
   `localStorage`. A markdown export writes a dated caption rather than a megabyte of base64 — use
   the `.json` backup to preserve the pixels.
@@ -68,7 +72,7 @@ and a serverless function, and the app runs fine with it unconfigured.
 - **Raw view.** `r` or the **Raw** button shows an entry's markdown source without opening the
   editor, so you can read or copy it without risking an edit.
 - **Live task checkboxes.** Ticking a rendered `* [ ]` writes `[x]` back into the markdown source.
-- **Checkbox.** Prefixes every non-empty line of an entry with `* [ ] `. Idempotent — lines that are
+- **☑️ (Checkbox).** Prefixes every non-empty line of an entry with `* [ ] `. Idempotent — lines that are
   already tasks are left alone, and existing bullets (`- `, `1. `) are converted rather than doubled.
   **Checkbox All** applies it to every entry.
 - **Timestamps** on every entry, and long entries are clamped with *Show more* so one big paste does
@@ -78,8 +82,15 @@ and a serverless function, and the app runs fine with it unconfigured.
 - **Tabular paste becomes a table.** Markdown tables render on their own; what does not is text that
   only looks tabular. A tab-separated grid (Excel, a query result) is converted to a markdown table
   on paste, and pipe rows written without the `| --- |` delimiter row GFM requires have it inserted.
-- **Image entries are never merged.** Merging is offered only between two text entries, so an image
-  cannot be silently discarded into an entry's markdown.
+- **Table tools.** An entry that is a markdown table and nothing else gets two controls in each
+  header cell: ↕ sorts by that column (click again for descending) and ✕ deletes the column. Numbers,
+  currency, `1,200`, percentages and accounting negatives `(4)` sort as numbers; text sorts
+  naturally (`item 2` before `item 10`); empty cells sink to the bottom. Alignment and cell content
+  are kept, and each sort or delete is one undo step. A table inside other text gets no controls.
+- **Merging images.** **Merge ↓** on an image with another image directly below stacks the two into
+  one image, left-aligned on a transparent canvas as wide as the wider one. Annotations on both are
+  kept as editable shapes, the lower image's moved down with it. An image and a text entry never
+  merge, so an image cannot be silently discarded into an entry's markdown.
 - Per-entry **Copy**, reorder, and delete.
 
 ### Notebook
@@ -98,6 +109,11 @@ and a serverless function, and the app runs fine with it unconfigured.
 - **New entries go to the top** (⋯ menu) puts new, pasted, templated and imported entries above the
   existing ones instead of below. `a` and `b` still insert relative to the selected entry.
 - **Compact mode** (⋯ menu) tightens spacing and type for small screens and long notebooks.
+  Timestamps stay visible.
+- **▾ All / ▸ All** in the header folds every entry at once, or unfolds them when all are already
+  folded.
+- **The search box** takes the free width in the header, up to 360px, and gives it up first as the
+  window narrows — down to 120px — before any button wraps to a second line.
 - **The shortcut hint line** can be dismissed with its ✕ and brought back from the ⋯ menu.
 - **Collapse an entry** with the ▾ button to leave two lines of it visible; the entry keeps a
   marked edge, a `+n lines` chip, and its collapsed state across reloads. Double-click a collapsed

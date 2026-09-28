@@ -8,8 +8,22 @@ import {
   normalizedBox,
   pointsToPolygon,
   strokeWidth,
+  transformShapes,
   type Shape,
 } from "@/lib/annotate";
+
+describe("moving shapes with their image", () => {
+  it("offsets and scales every coordinate, freehand points included", () => {
+    const shapes: Shape[] = [
+      { id: "a", kind: "rect", x1: 10, y1: 20, x2: 30, y2: 40, color: "#fff" },
+      { id: "b", kind: "freedraw", x1: 0, y1: 0, x2: 4, y2: 4, color: "#fff", points: [[0, 0], [4, 4]] },
+    ];
+    const moved = transformShapes(shapes, 0, 100, 0.5);
+    expect(moved[0]).toMatchObject({ x1: 5, y1: 60, x2: 15, y2: 70 });
+    expect(moved[1].points).toEqual([[0, 50], [2, 52]]);
+    expect(shapes[0].y1).toBe(20);
+  });
+});
 
 const shape = (over: Partial<Shape> = {}): Shape => ({
   id: "s1",

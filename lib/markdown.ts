@@ -15,7 +15,9 @@ export type Backup = {
   cells: Cell[];
 };
 
-import type { StoredImage } from "./image";
+import type { ImageView, StoredImage } from "./image";
+
+const IMAGE_VIEWS: readonly ImageView[] = ["thumb", "width", "height", "original"];
 
 export const STORAGE_KEY = "md-notebook:v2";
 const LEGACY_KEY = "md-notebook:v1";
@@ -155,6 +157,7 @@ function normalizeCells(input: unknown): Cell[] {
           addedAt: Number(image.addedAt) || cell.createdAt,
           name: typeof image.name === "string" ? image.name : undefined,
           annotations: Array.isArray(image.annotations) ? image.annotations : undefined,
+          view: IMAGE_VIEWS.includes(image.view as ImageView) ? (image.view as ImageView) : undefined,
         };
       }
       return cell;
