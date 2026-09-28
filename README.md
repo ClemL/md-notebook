@@ -110,8 +110,8 @@ and a serverless function, and the app runs fine with it unconfigured.
   existing ones instead of below. `a` and `b` still insert relative to the selected entry.
 - **Compact mode** (⋯ menu) tightens spacing and type for small screens and long notebooks.
   Timestamps stay visible.
-- **Collapse all / Expand all** in the header folds every entry at once, or unfolds them when all
-  are already folded.
+- **▾ All / ▸ All** in the header folds every entry at once, or unfolds them when all are already
+  folded.
 - **The search box** takes the free width in the header, up to 360px, and gives it up first as the
   window narrows — down to 120px — before any button wraps to a second line.
 - **The shortcut hint line** can be dismissed with its ✕ and brought back from the ⋯ menu.
