@@ -159,3 +159,17 @@ export function drawShapes(
     }
   }
 }
+
+/** Shapes moved by (dx, dy) and scaled by `scale`, for when their image is composited or resized. */
+export function transformShapes(shapes: Shape[], dx: number, dy: number, scale = 1): Shape[] {
+  const x = (v: number) => (v + dx) * scale;
+  const y = (v: number) => (v + dy) * scale;
+  return shapes.map((s) => ({
+    ...s,
+    x1: x(s.x1),
+    y1: y(s.y1),
+    x2: x(s.x2),
+    y2: y(s.y2),
+    ...(s.points ? { points: s.points.map(([px, py]) => [x(px), y(py)] as [number, number]) } : {}),
+  }));
+}

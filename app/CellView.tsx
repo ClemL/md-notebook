@@ -1,14 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Btn from "./Btn";
-import MarkdownView from "./MarkdownView";
+import MarkdownView, { type TableTools } from "./MarkdownView";
 import ImageCell from "./ImageCell";
 import { Cell, formatStamp, isImageCell } from "@/lib/markdown";
-import type { StoredImage } from "@/lib/image";
+import type { ImageView, StoredImage } from "@/lib/image";
 import { continueListOnEnter, insertAt, isUrl, wrapSelectionAsLink } from "@/lib/editor";
 import { htmlIsWorthConverting, htmlToMarkdown, rewriteAzureDevOpsUrl } from "@/lib/richPaste";
-import { maybeTable } from "@/lib/table";
+import { deleteTableColumn, maybeTable, parseTable, sortTable } from "@/lib/table";
 
 const COLLAPSE_PX = 420;
 /** A collapsed entry shows this many lines of its rendered output and nothing else. */
@@ -36,6 +36,9 @@ type Props = {
   onDelete: () => void;
   onMove: (delta: -1 | 1) => void;
   onImageChange: (next: StoredImage) => void;
+  onImageView: (view: ImageView) => void;
+  /** A structural rewrite of the text (a table sort or column delete): one undo step. */
+  onReplaceText: (text: string) => void;
   onNotify: (message: string) => void;
   onToggleRaw: () => void;
   onToggleCollapse: () => void;
@@ -71,6 +74,8 @@ export default function CellView({
   onDelete,
   onMove,
   onImageChange,
+  onImageView,
+  onReplaceText,
   onNotify,
   onToggleRaw,
   onToggleCollapse,
@@ -216,11 +221,41 @@ export default function CellView({
   const lineCount = cell.text.trim() ? cell.text.trim().split("\n").length : 0;
   const hiddenLines = Math.max(0, lineCount - COLLAPSED_LINES);
 
+  // An entry that is one markdown table and nothing else gets sort and column-delete controls.
+  const table = useMemo(() => (editing || raw ? null : parseTable(cell.text)), [cell.text, editing, raw]);
+  const [sorted, setSorted] = useState<TableTools["sorted"]>(null);
+  // A hand edit can reorder the rows, after which the sort marker would be a claim it cannot back.
+  useEffect(() => {
+    if (editing) setSorted(null);
+  }, [editing]);
+  const tableTools: TableTools | undefined = table
+    ? {
+        sorted,
+        canDelete: table.header.length > 1,
+        onSort: (col) => {
+          const dir = sorted?.col === col && sorted.dir === "asc" ? "desc" : "asc";
+          const next = sortTable(cell.text, col, dir);
+          if (next === null) return;
+          setSorted({ col, dir });
+          if (next !== cell.text) onReplaceText(next);
+        },
+        onDeleteColumn: (col) => {
+          const next = deleteTableColumn(cell.text, col);
+          if (next === null) return;
+          setSorted(null);
+          onReplaceText(next);
+        },
+      }
+    : undefined;
+
   if (isImageCell(cell)) {
     return (
       <ImageCell
         cell={cell}
         index={index}
+        first={first}
+        last={last}
+        canMerge={canMerge}
         selected={selected}
         flashed={flashed}
         collapsed={collapsed}
@@ -228,6 +263,9 @@ export default function CellView({
         onSelect={onSelect}
         onCopy={onCopy}
         onDelete={onDelete}
+        onMove={onMove}
+        onMerge={onMerge}
+        onViewChange={onImageView}
         onImageChange={onImageChange}
         onNotify={onNotify}
       />
@@ -269,7 +307,7 @@ export default function CellView({
           onMouseDown={keepFocus}
           onClick={onCheckbox}
         >
-          Checkbox
+          ☑️
         </Btn>
         <Btn
           tip="Copy this entry's markdown"
@@ -370,7 +408,7 @@ export default function CellView({
         ) : raw && cell.text.trim() ? (
           <pre className="raw">{cell.text}</pre>
         ) : cell.text.trim() ? (
-          <MarkdownView text={cell.text} onToggleTask={onToggleTask} />
+          <MarkdownView text={cell.text} onToggleTask={onToggleTask} tableTools={tableTools} />
         ) : (
           <div className="empty-cell" onClick={onEdit}>
             (empty entry — click Edit)

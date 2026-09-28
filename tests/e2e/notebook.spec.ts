@@ -450,23 +450,23 @@ test("an Azure DevOps file link pastes as path > link", async ({ page }) => {
 });
 
 /** A tiny opaque PNG, built in the page so the paste carries a real image file. */
-async function pasteImage(page: Page) {
-  await page.evaluate(async () => {
+async function pasteImage(page: Page, size: [number, number] = [120, 80], count = 1) {
+  await page.evaluate(async ([w, h]) => {
     const canvas = document.createElement("canvas");
-    canvas.width = 120;
-    canvas.height = 80;
+    canvas.width = w;
+    canvas.height = h;
     const ctx = canvas.getContext("2d")!;
     ctx.fillStyle = "#7cc4ff";
-    ctx.fillRect(0, 0, 120, 80);
+    ctx.fillRect(0, 0, w, h);
     const blob: Blob = await new Promise((resolve) => canvas.toBlob((b) => resolve(b!), "image/png"));
     const file = new File([blob], "screenshot.png", { type: "image/png" });
     const dt = new DataTransfer();
     dt.items.add(file);
     document.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
-  });
+  }, size);
   // Storing an image is asynchronous (decode, downscale, encode) and the save effect runs after
   // that, so wait for it to land rather than racing it.
-  await expect(page.locator("section.cell.image-cell")).toHaveCount(1);
+  await expect(page.locator("section.cell.image-cell")).toHaveCount(count);
   await storedImage(page);
 }
 
@@ -487,19 +487,24 @@ async function storedImage(page: Page): Promise<Record<string, string>> {
   return (await read()) as unknown as Record<string, string>;
 }
 
-test("a pasted image becomes an image entry with copy and delete only", async ({ page }) => {
+test("a pasted image becomes an image entry without the text actions", async ({ page }) => {
   await pasteImage(page);
   const cell = page.locator("section.cell.image-cell");
   await expect(cell).toHaveCount(1);
   await expect(cell.locator("button.thumb img")).toHaveAttribute("src", /^data:image\/png;base64,/);
-  await expect(cell.locator(".image-label")).toContainText("120×80");
   await expect(cell.locator(".stamp")).toHaveText(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
+  // No "image · W×H · size" label: the header carries actions only.
+  await expect(cell.locator(".cell-head")).not.toContainText("image ·");
 
-  // Only the copy and delete actions are offered on an image entry.
+  // Text-only actions are not offered on an image entry; moving it is.
   const labels = await cell.getByRole("button").evaluateAll((els) =>
     els.map((el) => el.getAttribute("aria-label") ?? el.textContent?.trim() ?? ""),
   );
-  expect(labels.filter((l) => /Edit|Checkbox|Split|Merge|Raw|Move/.test(l))).toEqual([]);
+  expect(labels.filter((l) => /Edit this|Prefix every line|Split|Raw|Send/.test(l))).toEqual([]);
+  // A lone image has nothing below it to merge with.
+  expect(labels.filter((l) => /Merge/.test(l))).toEqual([]);
+  expect(labels.some((l) => /Move entry up/.test(l))).toBe(true);
+  expect(labels.some((l) => /Move entry down/.test(l))).toBe(true);
   expect(labels.some((l) => /Copy the image/.test(l))).toBe(true);
   expect(labels.some((l) => /Delete this image/.test(l))).toBe(true);
 });
@@ -610,7 +615,7 @@ test("an image entry cannot be merged away", async ({ page }) => {
   // Nor does the keyboard path swallow it.
   await page.locator("section.cell").first().click({ position: { x: 5, y: 5 } });
   await page.keyboard.press("Shift+M");
-  await expect(page.locator(".toast")).toContainText("Image entries cannot be merged");
+  await expect(page.locator(".toast")).toContainText("An image can only be merged with another image");
   await expect(page.locator("section.cell")).toHaveCount(2);
   await expect(page.locator("section.cell.image-cell button.thumb img")).toBeVisible();
 });
@@ -725,7 +730,7 @@ test("an image entry collapses away its thumbnail", async ({ page }) => {
   await cell.getByRole("button", { name: /Collapse this image/ }).click();
   await expect(cell).toHaveClass(/collapsed/);
   await expect(cell.locator("button.thumb img")).toBeHidden();
-  await expect(cell.locator(".image-label")).toBeVisible();
+  await expect(cell.locator(".stamp")).toBeVisible();
 
   await cell.getByRole("button", { name: /Expand this image/ }).click();
   await expect(cell.locator("button.thumb img")).toBeVisible();
@@ -953,6 +958,8 @@ test("the built-in annotator stores shapes beside the image, not in it", async (
   await page.getByRole("button", { name: /Draw arrows and boxes/ }).click();
   await expect(page.locator(".annotation-layer.editing")).toBeVisible();
 
+  // The editor opens on the box tool; switch to arrows for the first shape.
+  await page.keyboard.press("a");
   await drag(page, [10, 10], [80, 50]);
   await page.keyboard.press("r");
   await drag(page, [20, 30], [90, 60]);
@@ -984,6 +991,7 @@ test("the built-in annotator stores shapes beside the image, not in it", async (
 test("annotations can be undone, cleared and cancelled inside the editor", async ({ page }) => {
   await pasteImage(page);
   await page.getByRole("button", { name: /Draw arrows and boxes/ }).click();
+  await page.keyboard.press("a");
   await drag(page, [10, 10], [80, 50]);
   await drag(page, [20, 20], [70, 60]);
   await expect(page.locator(".annotation-layer.editing line")).toHaveCount(2);
@@ -1178,4 +1186,160 @@ test("a dev.azure.com URL of no recognized shape is left to the browser", async 
 
   expect(claimed).toBe(false);
   await expect(ta).toHaveValue("");
+});
+
+/* ------------------------------------------- image views, moves and merges; table tools */
+
+test("an image can be shown as a thumbnail, fit to width or height, or 1:1", async ({ page }) => {
+  await pasteImage(page, [1200, 300]);
+  const cell = page.locator("section.cell.image-cell");
+  const img = cell.locator("button.thumb img");
+  const size = () => img.evaluate((el) => ({ w: el.clientWidth, h: el.clientHeight }));
+  const entryWidth = await cell.locator(".cell-body").evaluate((el) => el.clientWidth);
+
+  // Thumbnail by default: narrower than the entry.
+  await expect(cell.getByRole("button", { name: "Show a small thumbnail" })).toHaveAttribute("aria-pressed", "true");
+  expect((await size()).w).toBeLessThan(entryWidth);
+
+  await cell.getByRole("button", { name: /Fit the image to the width/ }).click();
+  await expect.poll(async () => (await size()).w).toBeGreaterThan(entryWidth - 40);
+
+  await cell.getByRole("button", { name: /Fit the image to the height/ }).click();
+  const viewport = page.viewportSize()!;
+  await expect.poll(async () => (await size()).h).toBeGreaterThan(viewport.height - 200);
+
+  await cell.getByRole("button", { name: /original size/ }).click();
+  await expect.poll(async () => size()).toEqual({ w: 1200, h: 300 });
+
+  // The choice is kept with the entry, but is not an undoable edit.
+  await page.reload();
+  await ready(page);
+  await expect(
+    page.locator("section.cell.image-cell").getByRole("button", { name: /original size/ }),
+  ).toHaveAttribute("aria-pressed", "true");
+});
+
+test("image entries move up and down like any other entry", async ({ page }) => {
+  await addEntry(page, "text entry");
+  await pasteImage(page);
+  const order = () =>
+    page.locator("section.cell").evaluateAll((els) => els.map((el) => (el.classList.contains("image-cell") ? "img" : "txt")));
+  expect(await order()).toEqual(["txt", "img"]);
+
+  const image = page.locator("section.cell.image-cell");
+  await expect(image.getByRole("button", { name: /Move entry down/ })).toBeDisabled();
+  await image.getByRole("button", { name: /Move entry up/ }).click();
+  expect(await order()).toEqual(["img", "txt"]);
+});
+
+test("two adjacent images merge into one, stacked, keeping their annotations", async ({ page }) => {
+  await pasteImage(page, [120, 80], 1);
+  await pasteImage(page, [100, 50], 2);
+  const images = page.locator("section.cell.image-cell");
+
+  // Only the upper image offers the merge; the lower has nothing below it.
+  await expect(images.nth(0).getByRole("button", { name: /Merge with the image below/ })).toHaveCount(1);
+  await expect(images.nth(1).getByRole("button", { name: /Merge with the image below/ })).toHaveCount(0);
+
+  await images.nth(0).getByRole("button", { name: /Merge with the image below/ }).click();
+  await expect(images).toHaveCount(1);
+  await expect(page.locator(".toast")).toContainText("120×130");
+
+  const merged = await images.locator("button.thumb img").evaluate((el) => {
+    const img = el as HTMLImageElement;
+    return { w: img.naturalWidth, h: img.naturalHeight };
+  });
+  expect(merged).toEqual({ w: 120, h: 130 });
+
+  // One undo step brings both back.
+  await page.keyboard.press("Control+z");
+  await expect(images).toHaveCount(2);
+});
+
+test("an image does not offer to merge with a text entry", async ({ page }) => {
+  await pasteImage(page);
+  await addEntry(page, "text below");
+  // New entries land at the bottom, so the image is first and text follows it.
+  await expect(page.locator("section.cell.image-cell").getByRole("button", { name: /Merge/ })).toHaveCount(0);
+});
+
+test("the annotator opens on the box tool", async ({ page }) => {
+  await pasteImage(page);
+  await page.getByRole("button", { name: /Mark the image up inside this entry/ }).click();
+  await expect(page.locator(".editor-bar button[aria-pressed='true']:not(.swatch)")).toContainText("Box");
+});
+
+test("an entry that is only a table can be sorted by column and lose a column", async ({ page }) => {
+  await addEntry(page, "| Name | Qty |\n| --- | ---: |\n| pear | 10 |\n| apple | 2 |\n| fig | 33 |");
+  const rows = () => page.locator(".md tbody tr td:first-child").allTextContents();
+  expect(await rows()).toEqual(["pear", "apple", "fig"]);
+
+  await page.getByRole("button", { name: "Sort by column 1" }).click();
+  expect(await rows()).toEqual(["apple", "fig", "pear"]);
+  await page.getByRole("button", { name: "Sort by column 1, descending" }).click();
+  expect(await rows()).toEqual(["pear", "fig", "apple"]);
+
+  // Numbers sort as numbers, not as text.
+  await page.getByRole("button", { name: "Sort by column 2" }).click();
+  expect(await page.locator(".md tbody tr td:nth-child(2)").allTextContents()).toEqual(["2", "10", "33"]);
+
+  await page.getByRole("button", { name: "Delete column 1" }).click();
+  await expect(page.locator(".md thead th")).toHaveCount(1);
+  await expect(page.locator(".md thead th")).toContainText("Qty");
+  // The last column cannot be deleted.
+  await expect(page.getByRole("button", { name: /Delete column/ })).toHaveCount(0);
+
+  // Each change is an undo step.
+  await page.keyboard.press("Control+z");
+  await expect(page.locator(".md thead th")).toHaveCount(2);
+});
+
+test("a table inside other text gets no table tools", async ({ page }) => {
+  await addEntry(page, "Notes first\n\n| a | b |\n| - | - |\n| 1 | 2 |");
+  await expect(page.locator(".md table")).toHaveCount(1);
+  await expect(page.getByRole("button", { name: /Sort by column/ })).toHaveCount(0);
+});
+
+test("collapse all folds every entry, and expands them again", async ({ page }) => {
+  await addEntry(page, "one\ntwo\nthree\nfour");
+  await addEntry(page, "five\nsix\nseven");
+  await page.getByRole("button", { name: /Collapse every entry/ }).click();
+  await expect(page.locator("section.cell.collapsed")).toHaveCount(2);
+  await page.getByRole("button", { name: /Expand every entry/ }).click();
+  await expect(page.locator("section.cell.collapsed")).toHaveCount(0);
+});
+
+test("compact mode keeps timestamps and shortens the Excalidraw label", async ({ page }) => {
+  await pasteImage(page);
+  const xcd = page.getByRole("button", { name: /open Excalidraw in a new window/ });
+  // innerText, because both labels are in the DOM and CSS shows one of them.
+  await expect(xcd).toHaveText("Excalidraw ↗", { useInnerText: true });
+
+  await page.getByRole("button", { name: "More actions" }).click();
+  await page.getByText("Compact mode").click();
+  await page.keyboard.press("Escape");
+
+  await expect(xcd).toHaveText("Xcd ↗", { useInnerText: true });
+  await expect(page.locator("section.cell .stamp")).toBeVisible();
+});
+
+test("header labels: + Paste and a checkbox emoji", async ({ page }) => {
+  await expect(page.getByRole("button", { name: /New entry from clipboard/ })).toHaveText("+ Paste");
+  await addEntry(page, "a line");
+  await expect(page.getByRole("button", { name: /Prefix every line/ })).toHaveText("☑️");
+});
+
+test("the search box shrinks before the header wraps", async ({ page }) => {
+  const header = page.locator("header.bar");
+  const search = page.locator(".search");
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const wide = (await search.boundingBox())!.width;
+  const oneLine = (await header.boundingBox())!.height;
+
+  // Narrower window: the search box has given up width and the header is still one line.
+  await page.setViewportSize({ width: 940, height: 800 });
+  const narrow = (await search.boundingBox())!.width;
+  expect(narrow).toBeLessThan(wide);
+  expect(narrow).toBeGreaterThanOrEqual(120);
+  expect((await header.boundingBox())!.height).toBeLessThanOrEqual(oneLine + 1);
 });

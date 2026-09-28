@@ -30,7 +30,9 @@ import {
   copyImage,
   imageFromTransfer,
   readClipboardImage,
+  stackImages,
   storeImage,
+  type ImageView,
   type StoredImage,
 } from "@/lib/image";
 import { maybeTable } from "@/lib/table";
@@ -227,6 +229,14 @@ function NotebookInner() {
   const toggleCollapsed = useCallback((id: string) => {
     setCollapsedIds((prev) => ({ ...prev, [id]: !prev[id] }));
   }, []);
+
+  const allCollapsed = cells.length > 0 && cells.every((c) => collapsedIds[c.id]);
+
+  /** Collapses every entry, or expands them all when every one is already collapsed. */
+  const toggleCollapseAll = useCallback(() => {
+    const expand = cellsRef.current.every((c) => collapsedIds[c.id]);
+    setCollapsedIds(expand ? {} : Object.fromEntries(cellsRef.current.map((c) => [c.id, true])));
+  }, [collapsedIds]);
 
   // Another tab wrote the notebook: adopt its state instead of overwriting it on our next save.
   // An entry being edited here is preserved, so a background tab cannot discard in-progress text.
@@ -435,10 +445,29 @@ function NotebookInner() {
     (id: string) => {
       const i = cellsRef.current.findIndex((c) => c.id === id);
       if (i < 0 || i === cellsRef.current.length - 1) return;
+      const here = cellsRef.current[i];
       const next = cellsRef.current[i + 1];
-      // An image entry holds no markdown, so merging one would silently discard the image.
-      if (isImageCell(cellsRef.current[i]) || isImageCell(next)) {
-        return say("Image entries cannot be merged.");
+      // Two images stack into one; an image and text cannot merge, since an image entry holds no
+      // markdown and the merge would silently discard one side.
+      if (isImageCell(here) && isImageCell(next)) {
+        void stackImages(here.image!, next.image!)
+          .then((image) => {
+            mutate((prev) =>
+              prev
+                .map((c) => (c.id === id ? { ...c, image, updatedAt: Date.now() } : c))
+                .filter((c) => c.id !== next.id),
+            );
+            setSelectedId(id);
+            say(`Merged into one ${image.width}×${image.height} image.`, {
+              label: "Undo",
+              run: () => undoRef.current(),
+            });
+          })
+          .catch((err) => say(err instanceof Error ? err.message : "The images could not be merged."));
+        return;
+      }
+      if (isImageCell(here) || isImageCell(next)) {
+        return say("An image can only be merged with another image.");
       }
       const merged = mergeTexts(cellsRef.current[i].text, next.text);
       mutate((prev) =>
@@ -499,6 +528,22 @@ function NotebookInner() {
       say("Image updated.", { label: "Undo", run: () => undoRef.current() });
     },
     [mutate, say],
+  );
+
+  // Display preference, not content: saved with the entry but kept out of the undo history.
+  const setImageView = useCallback((id: string, view: ImageView) => {
+    const next = cellsRef.current.map((c) =>
+      c.id === id && c.image ? { ...c, image: { ...c.image, view } } : c,
+    );
+    cellsRef.current = next;
+    setCells(next);
+  }, []);
+
+  const replaceText = useCallback(
+    (id: string, text: string) => {
+      mutate((prev) => prev.map((c) => (c.id === id ? { ...c, text, updatedAt: Date.now() } : c)));
+    },
+    [mutate],
   );
 
   const toggleTask = useCallback(
@@ -894,7 +939,7 @@ function NotebookInner() {
         <span className="title">md-notebook</span>
 
         <Btn className="primary" tip="New entry from clipboard" hotkey="Ctrl+Shift+V" onClick={newFromClipboard}>
-          + Paste New
+          + Paste
         </Btn>
         <Btn tip="New empty entry" hotkey="Ctrl+Shift+Enter" onClick={() => appendCell("")}>
           + Empty
@@ -904,6 +949,14 @@ function NotebookInner() {
         </Btn>
         <Btn tip="Redo the change you just undid" hotkey="Ctrl+Shift+Z" onClick={redo} disabled={!canRedo}>
           Redo
+        </Btn>
+
+        <Btn
+          tip={allCollapsed ? "Expand every entry" : "Collapse every entry to its first lines"}
+          onClick={toggleCollapseAll}
+          disabled={!cells.length}
+        >
+          {allCollapsed ? "▸ All" : "▾ All"}
         </Btn>
 
         <span className="search">
@@ -1073,7 +1126,7 @@ function NotebookInner() {
 
       {!loaded ? null : cells.length === 0 ? (
         <div className="empty-state">
-          No entries yet. <strong>+ Paste New</strong> drops your clipboard into a fresh entry, or
+          No entries yet. <strong>+ Paste</strong> drops your clipboard into a fresh entry, or
           drag a <code>.md</code> file anywhere on this page.
         </div>
       ) : visible.length === 0 ? (
@@ -1096,10 +1149,12 @@ function NotebookInner() {
             canMerge={(() => {
               const at = cells.indexOf(cell);
               const next = cells[at + 1];
-              return !!next && !isImageCell(cell) && !isImageCell(next);
+              return !!next && isImageCell(cell) === isImageCell(next);
             })()}
             onSelect={() => setSelectedId(cell.id)}
             onImageChange={(image) => updateImage(cell.id, image)}
+            onImageView={(view) => setImageView(cell.id, view)}
+            onReplaceText={(text) => replaceText(cell.id, text)}
             onNotify={(message) => say(message)}
             onToggleRaw={() => setRawIds((prev) => ({ ...prev, [cell.id]: !prev[cell.id] }))}
             onSplit={(caret) => splitCell(cell.id, caret)}

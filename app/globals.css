@@ -381,12 +381,18 @@ kbd {
 
 /* ---------- search ---------- */
 
+/*
+ * The search box takes the free space in the header, up to 360px. Its basis is its minimum, so
+ * as the window narrows it gives up width first, down to about a third of that, and only then
+ * do the buttons after it wrap to a second line.
+ */
 .search {
   position: relative;
   display: inline-flex;
   align-items: center;
-  min-width: 180px;
-  flex: 0 1 240px;
+  min-width: 120px;
+  max-width: 360px;
+  flex: 100 1 120px;
 }
 
 .search input {
@@ -869,9 +875,21 @@ button.collapse-toggle {
   padding: 8px 0;
 }
 
-[data-compact="on"] .stamp,
 [data-compact="on"] .cell-index {
   display: none;
+}
+
+/* Long button labels with a compact form, e.g. "Excalidraw ↗" / "Xcd ↗". */
+.label-short {
+  display: none;
+}
+
+[data-compact="on"] .label-full {
+  display: none;
+}
+
+[data-compact="on"] .label-short {
+  display: inline;
 }
 
 [data-compact="on"] button.thumb img {
@@ -962,6 +980,7 @@ button.collapse-toggle {
   .search {
     flex: 1 1 100%;
     min-width: 0;
+    max-width: none;
   }
 
   .cell-body {
@@ -1185,4 +1204,82 @@ button.swatch.on {
 
 .editor-inline .editor-title {
   font-size: 12px;
+}
+
+/* ---------- image view modes ---------- */
+
+.view-group {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.view-group button.on {
+  border-color: var(--accent);
+  color: var(--fg);
+}
+
+/* Thumb (the default) keeps the rules on button.thumb img above. */
+.thumb-frame.view-width button.thumb {
+  width: 100%;
+}
+
+.thumb-frame.view-width button.thumb img {
+  width: 100%;
+  max-height: none;
+}
+
+.thumb-frame.view-height button.thumb img {
+  height: calc(100dvh - 140px);
+  width: auto;
+  max-width: none;
+  max-height: none;
+}
+
+.thumb-frame.view-original button.thumb img {
+  max-width: none;
+  max-height: none;
+}
+
+/* Fit height and 1:1 can be wider than the entry: scroll inside it rather than overflow it. */
+.thumb-frame.view-height,
+.thumb-frame.view-original {
+  overflow-x: auto;
+}
+
+.thumb-frame.view-height button.thumb,
+.thumb-frame.view-original button.thumb {
+  max-width: none;
+}
+
+[data-compact="on"] .thumb-frame:not(.view-thumb) button.thumb img {
+  max-height: none;
+}
+
+/* ---------- table tools ---------- */
+
+.th-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.md button.th-btn {
+  font-size: 10px;
+  line-height: 1;
+  min-height: 0;
+  padding: 2px 4px;
+  opacity: 0.55;
+}
+
+.md th:hover button.th-btn,
+.md button.th-btn.on,
+.md button.th-btn:focus-visible {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .md button.th-btn {
+    opacity: 1;
+    padding: 4px 6px;
+  }
 }

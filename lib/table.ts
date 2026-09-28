@@ -73,3 +73,79 @@ export function blankTable(cols: number, rows: number): string {
   const body = Array.from({ length: rows }, () => Array.from({ length: cols }, () => " "));
   return `${rowsToMarkdownTable([header, ...body])}\n`;
 }
+
+/* ------------------------------------------------------ editing a table in place */
+
+/**
+ * An entry that is a markdown table and nothing else: header, delimiter row, body rows. Cells
+ * are kept raw (escaped pipes and inline markdown intact) so a sort or a column delete rewrites
+ * only the order and the columns, never the content.
+ */
+export type ParsedTable = { header: string[]; delimiter: string[]; rows: string[][] };
+
+export function parseTable(text: string): ParsedTable | null {
+  const lines = text.replace(/\r\n/g, "\n").trim().split("\n");
+  if (lines.length < 2) return null;
+  if (!lines.every((l) => l.trim().includes("|"))) return null;
+  if (!DELIMITER_ROW.test(lines[1])) return null;
+
+  const cells = (l: string) => splitPipes(l).map((c) => c.trim());
+  const header = cells(lines[0]);
+  const delimiter = cells(lines[1]);
+  const rows = lines.slice(2).map(cells);
+  if (header.length < 1 || delimiter.length !== header.length) return null;
+  if (rows.some((r) => r.length !== header.length)) return null;
+  return { header, delimiter, rows };
+}
+
+export function formatTable(t: ParsedTable): string {
+  const line = (cells: string[]) => `| ${cells.join(" | ")} |`;
+  return [line(t.header), line(t.delimiter), ...t.rows.map(line)].join("\n");
+}
+
+/** A cell's value as a number when it reads as one: 1,234 · $12.50 · -3% · (42) · 1.2e3. */
+function numeric(cell: string): number | null {
+  let s = cell.replace(/[*_`]/g, "").trim();
+  const negative = /^\(.*\)$/.test(s);
+  s = s.replace(/^\(|\)$/g, "").replace(/[$€£,%\s]/g, "");
+  if (!s || !/^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i.test(s)) return null;
+  const n = Number(s);
+  return negative ? -n : n;
+}
+
+/**
+ * Rows sorted by one column. Numbers compare as numbers when both cells are numeric, text
+ * compares naturally ("item 2" before "item 10"), and empty cells always sink to the bottom.
+ * The sort is stable, so sorting by a second column keeps the first as the tiebreaker.
+ */
+export function sortTable(text: string, col: number, dir: "asc" | "desc"): string | null {
+  const t = parseTable(text);
+  if (!t || col < 0 || col >= t.header.length) return null;
+  const sign = dir === "asc" ? 1 : -1;
+  const rows = t.rows
+    .map((row, i) => ({ row, i }))
+    .sort((a, b) => {
+      const x = a.row[col];
+      const y = b.row[col];
+      if (!x && !y) return a.i - b.i;
+      if (!x) return 1;
+      if (!y) return -1;
+      const nx = numeric(x);
+      const ny = numeric(y);
+      const c =
+        nx !== null && ny !== null
+          ? nx - ny
+          : x.localeCompare(y, undefined, { numeric: true, sensitivity: "base" });
+      return c !== 0 ? c * sign : a.i - b.i;
+    })
+    .map(({ row }) => row);
+  return formatTable({ ...t, rows });
+}
+
+/** The table without one column; null when it is the only column left. */
+export function deleteTableColumn(text: string, col: number): string | null {
+  const t = parseTable(text);
+  if (!t || t.header.length < 2 || col < 0 || col >= t.header.length) return null;
+  const drop = (cells: string[]) => cells.filter((_, i) => i !== col);
+  return formatTable({ header: drop(t.header), delimiter: drop(t.delimiter), rows: t.rows.map(drop) });
+}

@@ -13,9 +13,13 @@ export type StoredImage = {
   name?: string;
   /** Built-in annotator shapes, kept beside the pixels rather than painted into them. */
   annotations?: Shape[];
+  /** How the entry shows it: a thumbnail (the default), fit to width or height, or 1:1. */
+  view?: ImageView;
 };
 
-import { drawShapes, type Shape } from "./annotate";
+export type ImageView = "thumb" | "width" | "height" | "original";
+
+import { drawShapes, transformShapes, type Shape } from "./annotate";
 
 const MAX_EDGE = [1400, 1000, 700, 500];
 const BUDGET_BYTES = 1_200_000;
@@ -104,6 +108,36 @@ export async function flattenAnnotations(image: StoredImage): Promise<Blob> {
       "image/png",
     );
   });
+}
+
+/**
+ * Two images stacked into one, the first above the second, left-aligned on a transparent canvas
+ * as wide as the wider of them. Each keeps its annotations as shapes, the lower one's moved down
+ * by the upper one's height, so the markup stays editable rather than being painted in. The
+ * result goes through the same size budget as a paste, and the shapes follow any downscale.
+ */
+export async function stackImages(top: StoredImage, bottom: StoredImage): Promise<StoredImage> {
+  const [a, b] = await Promise.all([loadDataUrl(top.dataUrl), loadDataUrl(bottom.dataUrl)]);
+  const width = Math.max(top.width, bottom.width);
+  const height = top.height + bottom.height;
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas is unavailable, so the images cannot be merged.");
+  ctx.drawImage(a, 0, 0, top.width, top.height);
+  ctx.drawImage(b, 0, top.height, bottom.width, bottom.height);
+
+  const blob = await new Promise<Blob>((resolve, reject) =>
+    canvas.toBlob((out) => (out ? resolve(out) : reject(new Error("The merged image could not be encoded."))), "image/png"),
+  );
+  const stored = await storeImage(blob, top.name);
+  const scale = stored.width / width;
+  const shapes = [
+    ...transformShapes(top.annotations ?? [], 0, 0, scale),
+    ...transformShapes(bottom.annotations ?? [], 0, top.height, scale),
+  ];
+  return { ...stored, addedAt: top.addedAt, annotations: shapes.length ? shapes : undefined };
 }
 
 export function dataUrlToBlob(dataUrl: string): Blob {
