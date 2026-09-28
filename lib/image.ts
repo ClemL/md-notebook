@@ -17,7 +17,7 @@ export type StoredImage = {
   view?: ImageView;
 };
 
-export type ImageView = "thumb" | "width" | "height" | "original";
+export type ImageView = "thumb" | "width" | "original";
 
 import { drawShapes, transformShapes, type Shape } from "./annotate";
 

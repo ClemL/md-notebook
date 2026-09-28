@@ -53,10 +53,11 @@ and a serverless function, and the app runs fine with it unconfigured.
 - **Duplicate detection.** Pasting a string that already exists verbatim jumps to that entry and
   says so instead of creating a twin; the toast offers *Add anyway*.
 - **Images.** Paste or drop a screenshot anywhere to store it as an image entry: a thumbnail that
-  opens full size on click, with its paste time in the header. It can be copied back to the
+  opens full size on click, with its dimensions, size and paste time on the right of the header.
+  It can be copied back to the
   clipboard as PNG, deleted, moved up and down, and marked up two ways (below); the annotator opens
-  on the box tool. **Thumb / Fit W / Fit H / 1:1** choose how it shows: a small thumbnail (the
-  default), the width of the entry, the height of the window, or its original pixels, scrolling
+  on the box tool. **Thumb / Fit W / 1:1** choose how it shows: a small thumbnail (the
+  default), the width of the entry, or its original pixels, scrolling
   sideways when wider than the entry. The choice is saved with the image but is not an undo step.
   In compact mode the Excalidraw button reads **Xcd ↗**. Images are re-encoded as PNG and
   downscaled until they fit a per-image budget, because the whole notebook shares a few megabytes of
@@ -112,7 +113,7 @@ and a serverless function, and the app runs fine with it unconfigured.
   Timestamps stay visible.
 - **▾ All / ▸ All** in the header folds every entry at once, or unfolds them when all are already
   folded.
-- **The search box** takes the free width in the header, up to 360px, and gives it up first as the
+- **The header** is titled **mdnb** to leave room for search. **The search box** takes the free width in the header, up to 480px, and gives it up first as the
   window narrows — down to 120px — before any button wraps to a second line.
 - **The shortcut hint line** can be dismissed with its ✕ and brought back from the ⋯ menu.
 - **Collapse an entry** with the ▾ button to leave two lines of it visible; the entry keeps a
@@ -159,17 +160,16 @@ Every button's tooltip names its shortcut. Outside a text box the notebook is in
 
 ## Marking up an image
 
-Two buttons on an image entry, for two different needs:
+Two ways, for two different needs:
 
-- **Draw** — the built-in annotator, full screen: boxes, arrows, lines and text labels in five
+- **Edit** — the built-in annotator, opened in place inside the entry so the notebook stays in
+  view; the button toggles it. **Full screen ⤢** in its toolbar moves the work in progress, unsaved
+  shapes included, to a full-window editor. Either way: boxes, arrows, lines and text labels in five
   colours. Tool keys are Excalidraw's own — `r`/`2` box, `a`/`5` arrow, `l`/`6` line, `t`/`8` text
   — with `Ctrl+Z` / `Ctrl+Shift+Z` to step through, `Ctrl+Enter` to save and `Esc` to cancel.
   **Double-click anywhere to drop a text label**, as in Excalidraw; `Esc` while typing abandons
   the label rather than the editor. The palette stops there on purpose: ellipse, freehand, diamond
   and the rest are what Excalidraw is for. Annotations drawn by an earlier version still render.
-
-- **Edit inline** — the same editor, in place inside the entry rather than over the window, for a
-  quick box without losing sight of the notebook. The button toggles it.
 
   Shapes are stored *beside* the pixels and drawn as an SVG overlay, so the screenshot itself is
   never modified, an annotation can be removed later, and the markup stays crisp at any zoom — a

@@ -936,7 +936,7 @@ function NotebookInner() {
     // data-ready flips once client state is restored; tests wait on it instead of racing hydration.
     <div className="app" data-ready={loaded ? "true" : undefined} data-compact={compact ? "on" : undefined}>
       <header className="bar">
-        <span className="title">md-notebook</span>
+        <span className="title" title="md-notebook">mdnb</span>
 
         <Btn className="primary" tip="New entry from clipboard" hotkey="Ctrl+Shift+V" onClick={newFromClipboard}>
           + Paste

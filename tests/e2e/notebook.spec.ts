@@ -493,8 +493,11 @@ test("a pasted image becomes an image entry without the text actions", async ({ 
   await expect(cell).toHaveCount(1);
   await expect(cell.locator("button.thumb img")).toHaveAttribute("src", /^data:image\/png;base64,/);
   await expect(cell.locator(".stamp")).toHaveText(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
-  // No "image · W×H · size" label: the header carries actions only.
-  await expect(cell.locator(".cell-head")).not.toContainText("image ·");
+  // Dimensions and size sit on the right, just before the timestamp.
+  await expect(cell.locator(".image-meta")).toHaveText(/^120×80 · \d+ (B|KB)$/);
+  expect(
+    await cell.locator(".image-meta").evaluate((el) => el.nextElementSibling?.classList.contains("stamp")),
+  ).toBe(true);
 
   // Text-only actions are not offered on an image entry; moving it is.
   const labels = await cell.getByRole("button").evaluateAll((els) =>
@@ -730,7 +733,7 @@ test("an image entry collapses away its thumbnail", async ({ page }) => {
   await cell.getByRole("button", { name: /Collapse this image/ }).click();
   await expect(cell).toHaveClass(/collapsed/);
   await expect(cell.locator("button.thumb img")).toBeHidden();
-  await expect(cell.locator(".stamp")).toBeVisible();
+  await expect(cell.locator(".image-meta")).toBeVisible();
 
   await cell.getByRole("button", { name: /Expand this image/ }).click();
   await expect(cell.locator("button.thumb img")).toBeVisible();
@@ -951,11 +954,33 @@ async function drag(page: Page, from: [number, number], to: [number, number]) {
   await page.mouse.up();
 }
 
+/** Edit opens the annotator in the entry; Full screen moves it to the whole window. */
+async function openFullEditor(page: Page) {
+  await page.getByRole("button", { name: /, in the entry/ }).click();
+  await page.getByRole("button", { name: "Full screen ⤢" }).click();
+  await expect(page.locator(".editor-overlay")).toBeVisible();
+}
+
+test("Full screen carries unsaved inline shapes into the window editor", async ({ page }) => {
+  await pasteImage(page);
+  await page.getByRole("button", { name: /, in the entry/ }).click();
+  // No separate Draw button any more: the full editor is an option inside Edit.
+  await expect(page.getByRole("button", { name: /^Draw/ })).toHaveCount(0);
+  await drag(page, [10, 10], [80, 50]);
+  await expect(page.locator(".editor-inline .annotation-layer.editing rect")).toHaveCount(1);
+
+  await page.getByRole("button", { name: "Full screen ⤢" }).click();
+  await expect(page.locator(".editor-inline")).toHaveCount(0);
+  await expect(page.locator(".editor-overlay .annotation-layer.editing rect")).toHaveCount(1);
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.locator("section.cell .annotation-layer rect")).toHaveCount(1);
+});
+
 test("the built-in annotator stores shapes beside the image, not in it", async ({ page }) => {
   await pasteImage(page);
   const before = (await storedImage(page)).dataUrl;
 
-  await page.getByRole("button", { name: /Draw arrows and boxes/ }).click();
+  await openFullEditor(page);
   await expect(page.locator(".annotation-layer.editing")).toBeVisible();
 
   // The editor opens on the box tool; switch to arrows for the first shape.
@@ -969,7 +994,7 @@ test("the built-in annotator stores shapes beside the image, not in it", async (
   await expect(page.locator("section.cell .annotation-layer")).toHaveCount(1);
   await expect(page.locator("section.cell .annotation-layer line")).toHaveCount(1);
   await expect(page.locator("section.cell .annotation-layer rect")).toHaveCount(1);
-  await expect(page.getByRole("button", { name: /arrows and boxes/ })).toHaveText("Draw (2)");
+  await expect(page.getByRole("button", { name: /Edit the 2 arrows and boxes/ })).toHaveText("Edit");
 
   const after = await storedImage(page);
   expect(after.dataUrl).toBe(before);
@@ -990,7 +1015,7 @@ test("the built-in annotator stores shapes beside the image, not in it", async (
 
 test("annotations can be undone, cleared and cancelled inside the editor", async ({ page }) => {
   await pasteImage(page);
-  await page.getByRole("button", { name: /Draw arrows and boxes/ }).click();
+  await openFullEditor(page);
   await page.keyboard.press("a");
   await drag(page, [10, 10], [80, 50]);
   await drag(page, [20, 20], [70, 60]);
@@ -1011,7 +1036,7 @@ test("annotations can be undone, cleared and cancelled inside the editor", async
 
 test("a stray tap does not become an annotation", async ({ page }) => {
   await pasteImage(page);
-  await page.getByRole("button", { name: /Draw arrows and boxes/ }).click();
+  await openFullEditor(page);
   await drag(page, [40, 40], [42, 41]);
   await expect(page.locator(".annotation-layer.editing line")).toHaveCount(0);
   await page.getByRole("button", { name: "Cancel" }).click();
@@ -1039,7 +1064,7 @@ test("Excalidraw hands the image to the clipboard and opens in its own window", 
 
 test("the annotator uses Excalidraw's tool keys", async ({ page }) => {
   await pasteImage(page);
-  await page.getByRole("button", { name: /Draw arrows and boxes/ }).click();
+  await openFullEditor(page);
   const active = page.locator(".editor-bar button[aria-pressed='true']:not(.swatch)");
 
   for (const [key, label] of [
@@ -1069,7 +1094,7 @@ test("the annotator uses Excalidraw's tool keys", async ({ page }) => {
 
 test("double-clicking drops a text label, and Ctrl+Z / Ctrl+Shift+Z step through it", async ({ page }) => {
   await pasteImage(page);
-  await page.getByRole("button", { name: /Draw arrows and boxes/ }).click();
+  await openFullEditor(page);
   const box = (await page.locator(".annotation-layer.editing").boundingBox())!;
 
   await page.mouse.dblclick(box.x + 60, box.y + 40);
@@ -1096,9 +1121,9 @@ test("double-clicking drops a text label, and Ctrl+Z / Ctrl+Shift+Z step through
   await expect(page.locator("section.cell .annotation-layer text")).toHaveCount(1);
 });
 
-test("Edit inline marks the image up inside the entry", async ({ page }) => {
+test("Edit marks the image up inside the entry", async ({ page }) => {
   await pasteImage(page);
-  await page.getByRole("button", { name: /Mark the image up inside this entry/ }).click();
+  await page.getByRole("button", { name: /, in the entry/ }).click();
 
   // In the entry, not over the whole window, and in place of the thumbnail.
   await expect(page.locator("section.cell .editor-inline")).toHaveCount(1);
@@ -1118,9 +1143,9 @@ test("Edit inline marks the image up inside the entry", async ({ page }) => {
   await expect(page.locator("section.cell .annotation-layer rect")).toHaveCount(1);
 
   // The button toggles, and cancelling leaves the entry as it was.
-  await page.getByRole("button", { name: /Mark the image up inside this entry/ }).click();
+  await page.getByRole("button", { name: /, in the entry/ }).click();
   await expect(page.locator(".editor-inline")).toHaveCount(1);
-  await page.getByRole("button", { name: /Mark the image up inside this entry/ }).click();
+  await page.getByRole("button", { name: /, in the entry/ }).click();
   await expect(page.locator(".editor-inline")).toHaveCount(0);
   await expect(page.locator("section.cell .annotation-layer rect")).toHaveCount(1);
 });
@@ -1190,7 +1215,7 @@ test("a dev.azure.com URL of no recognized shape is left to the browser", async 
 
 /* ------------------------------------------- image views, moves and merges; table tools */
 
-test("an image can be shown as a thumbnail, fit to width or height, or 1:1", async ({ page }) => {
+test("an image can be shown as a thumbnail, fit to width, or 1:1", async ({ page }) => {
   await pasteImage(page, [1200, 300]);
   const cell = page.locator("section.cell.image-cell");
   const img = cell.locator("button.thumb img");
@@ -1204,9 +1229,8 @@ test("an image can be shown as a thumbnail, fit to width or height, or 1:1", asy
   await cell.getByRole("button", { name: /Fit the image to the width/ }).click();
   await expect.poll(async () => (await size()).w).toBeGreaterThan(entryWidth - 40);
 
-  await cell.getByRole("button", { name: /Fit the image to the height/ }).click();
-  const viewport = page.viewportSize()!;
-  await expect.poll(async () => (await size()).h).toBeGreaterThan(viewport.height - 200);
+  // Fit to height is not offered.
+  await expect(cell.getByRole("button", { name: /height/ })).toHaveCount(0);
 
   await cell.getByRole("button", { name: /original size/ }).click();
   await expect.poll(async () => size()).toEqual({ w: 1200, h: 300 });
@@ -1265,7 +1289,7 @@ test("an image does not offer to merge with a text entry", async ({ page }) => {
 
 test("the annotator opens on the box tool", async ({ page }) => {
   await pasteImage(page);
-  await page.getByRole("button", { name: /Mark the image up inside this entry/ }).click();
+  await page.getByRole("button", { name: /, in the entry/ }).click();
   await expect(page.locator(".editor-bar button[aria-pressed='true']:not(.swatch)")).toContainText("Box");
 });
 
@@ -1324,6 +1348,7 @@ test("compact mode keeps timestamps and shortens the Excalidraw label", async ({
 });
 
 test("header labels: + Paste and a checkbox emoji", async ({ page }) => {
+  await expect(page.locator("header.bar .title")).toHaveText("mdnb");
   await expect(page.getByRole("button", { name: /New entry from clipboard/ })).toHaveText("+ Paste");
   await addEntry(page, "a line");
   await expect(page.getByRole("button", { name: /Prefix every line/ })).toHaveText("☑️");
