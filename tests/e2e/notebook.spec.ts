@@ -826,69 +826,6 @@ test.describe("touch device (foldable, phone)", () => {
   });
 });
 
-/* ---------------------------------------------------------------- transfer */
-
-test("Send says so when the deployment has no Upstash credentials", async ({ page }) => {
-  // The e2e server runs without UPSTASH_REDIS_REST_*, so the route answers 503 — which is the
-  // one transfer path that can be exercised end to end without a real database.
-  await addEntry(page, "entry to send");
-  await page.locator("section.cell").first().getByRole("button", { name: /Send this entry/ }).click();
-  await expect(page.locator(".toast")).toContainText("Transfer is not set up on this deployment");
-});
-
-test("Receive rejects a malformed code before calling the API", async ({ page }) => {
-  let calls = 0;
-  await page.route("**/api/transfer/**", async (route) => {
-    calls += 1;
-    await route.fulfill({ status: 404, json: { error: "not_found", message: "nope" } });
-  });
-
-  await page.getByRole("button", { name: "More actions" }).click();
-  await page.getByRole("button", { name: /Receive a transfer/ }).click();
-  const input = page.locator("#receive-code");
-  await expect(input).toBeFocused();
-  await input.fill("nope");
-  await input.press("Enter");
-
-  await expect(page.locator(".toast")).toContainText("is not a code");
-  expect(calls).toBe(0);
-
-  await input.press("Escape");
-  await expect(page.locator("#receive-code")).toHaveCount(0);
-});
-
-test("Send copies the code and Receive inserts the entries it returns", async ({ page }) => {
-  let sent: unknown = null;
-  await page.route("**/api/transfer", async (route) => {
-    sent = route.request().postDataJSON();
-    await route.fulfill({ json: { code: "7K2QM9X" } });
-  });
-  await page.route("**/api/transfer/7K2QM9X", async (route) => {
-    await route.fulfill({ json: { entries: ["received one", "received two"] } });
-  });
-
-  await addEntry(page, "entry to send");
-  await page.locator("section.cell").first().getByRole("button", { name: /Send this entry/ }).click();
-
-  await expect(page.locator(".toast")).toContainText("Code 7K2QM9X copied — valid 24h");
-  expect(sent).toEqual({ entries: ["entry to send"] });
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("7K2QM9X");
-
-  // The keyboard path opens the same input, and a lower-cased code is normalized for the request.
-  await page.keyboard.press("g");
-  await page.locator("#receive-code").fill("7k2qm9x");
-  await page.locator("#receive-code").press("Enter");
-
-  await expect(page.locator(".toast")).toContainText("Received 2 entries.");
-  await expect(page.locator("section.cell")).toHaveCount(3);
-  await expect(page.locator("section.cell").nth(1)).toContainText("received one");
-  await expect(page.locator("section.cell").nth(2)).toContainText("received two");
-
-  // Received entries are an ordinary import: one undo step.
-  await page.keyboard.press("Control+z");
-  await expect(page.locator("section.cell")).toHaveCount(1);
-});
-
 test("templates live in their own dropdown, separate from the actions menu", async ({ page }) => {
   await page.getByRole("button", { name: "Insert a template" }).click();
   await expect(page.getByRole("button", { name: "Meeting summary" })).toBeVisible();
@@ -1092,12 +1029,13 @@ test("the annotator uses Excalidraw's tool keys", async ({ page }) => {
   expect(tools.map((t) => t.trim().split(" ")[0])).toEqual(["Box", "Arrow", "Line", "Text"]);
 });
 
-test("double-clicking drops a text label, and Ctrl+Z / Ctrl+Shift+Z step through it", async ({ page }) => {
+test("the Text tool drops a label, and Ctrl+Z / Ctrl+Shift+Z step through it", async ({ page }) => {
   await pasteImage(page);
   await openFullEditor(page);
   const box = (await page.locator(".annotation-layer.editing").boundingBox())!;
 
-  await page.mouse.dblclick(box.x + 60, box.y + 40);
+  await page.keyboard.press("t");
+  await page.mouse.click(box.x + 60, box.y + 40);
   await page.locator("#annotation-text").fill("retry this job");
   await page.keyboard.press("Enter");
   await expect(page.locator(".annotation-layer.editing text")).toHaveText("retry this job");
@@ -1108,7 +1046,7 @@ test("double-clicking drops a text label, and Ctrl+Z / Ctrl+Shift+Z step through
   await expect(page.locator(".annotation-layer.editing text")).toHaveCount(1);
 
   // Escape while typing abandons the label rather than the whole editor.
-  await page.mouse.dblclick(box.x + 90, box.y + 70);
+  await page.mouse.click(box.x + 90, box.y + 70);
   await page.locator("#annotation-text").fill("never mind");
   await page.keyboard.press("Escape");
   await expect(page.locator("#annotation-text")).toHaveCount(0);

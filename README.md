@@ -4,10 +4,10 @@ A notebook-style markdown scratchpad. Entries behave like `.ipynb` cells, minus 
 type markdown, and the moment the text box loses focus it is replaced by the rendered
 output with an **Edit** button that brings the text box back.
 
-Everything lives in the browser's `localStorage` — no accounts, no sign-in, no sync. The one
-exception is **Send/Receive**, an opt-in hand-off that moves an entry to another machine through a
-short-lived key in Upstash Redis; it is the only part of the app that needs environment variables
-and a serverless function, and the app runs fine with it unconfigured.
+Everything lives in the browser's `localStorage` — no accounts, no sign-in, no sync. The
+**Send/Receive** hand-off between machines is switched off for now: its buttons, menu item and
+`s`/`g` shortcuts are gone from the UI, while the `/api/transfer` routes and their client remain in
+the codebase, unused, so the feature can be wired back in.
 
 ## Links
 
@@ -119,14 +119,6 @@ and a serverless function, and the app runs fine with it unconfigured.
 - **Collapse an entry** with the ▾ button to leave two lines of it visible; the entry keeps a
   marked edge, a `+n lines` chip, and its collapsed state across reloads. Double-click a collapsed
   entry to expand it. Image entries collapse to their header.
-- **Send / Receive.** Ad hoc, write-once transfer of an entry between machines, for when the
-  notebook on the laptop has something the notebook on the desktop needs. **Send** (`s`, or the
-  button in an entry's toolbar) uploads that entry's markdown and copies a 7-character code to the
-  clipboard. **Receive** (`g`, or the ⋯ menu) takes the code on the other machine and inserts the
-  content as new entries — at the top if that option is on, otherwise below the selected entry,
-  and as one undo step like any import. The read is a Redis `GETDEL`, so a code works exactly
-  once; an unclaimed transfer expires after 24 hours. There is no history, no re-claiming and no
-  account: if nobody receives it, it is gone. Image entries cannot be sent.
 - **Multi-tab safe.** A second tab's writes are adopted rather than overwritten, and an entry open
   for editing in this tab is preserved through the merge.
 - **Storage warning.** If `localStorage` is full or blocked, a banner says entries are memory-only
@@ -150,8 +142,6 @@ Every button's tooltip names its shortcut. Outside a text box the notebook is in
 | `Ctrl+Shift+-` | Split the entry being edited at the caret |
 | `Alt+↑` / `Alt+↓` | Move the entry up / down |
 | `/` or `Ctrl+K` | Search |
-| `s` | Send the selected entry, and copy its transfer code |
-| `g` | Receive a transfer by code |
 | `Ctrl+Shift+V` | New entry from the clipboard |
 | `Ctrl+Shift+Enter` | New empty entry |
 | `Ctrl+Z` / `Ctrl+Shift+Z` | Undo / redo |
@@ -167,8 +157,8 @@ Two ways, for two different needs:
   shapes included, to a full-window editor. Either way: boxes, arrows, lines and text labels in five
   colours. Tool keys are Excalidraw's own — `r`/`2` box, `a`/`5` arrow, `l`/`6` line, `t`/`8` text
   — with `Ctrl+Z` / `Ctrl+Shift+Z` to step through, `Ctrl+Enter` to save and `Esc` to cancel.
-  **Double-click anywhere to drop a text label**, as in Excalidraw; `Esc` while typing abandons
-  the label rather than the editor. The palette stops there on purpose: ellipse, freehand, diamond
+  With the Text tool, click to drop a label; `Esc` while typing abandons the label rather than the
+  editor. The palette stops there on purpose: ellipse, freehand, diamond
   and the rest are what Excalidraw is for. Annotations drawn by an earlier version still render.
 
   Shapes are stored *beside* the pixels and drawn as an SVG overlay, so the screenshot itself is
@@ -267,6 +257,8 @@ Set both in **Vercel → Project → Settings → Environment Variables** for Pr
 Development. Locally they go in `.env.local` (gitignored); `.env.local.example` documents them.
 
 ### Transfer API
+
+Not reachable from the UI at present (see the note at the top); the routes still deploy.
 
 | Route | Does |
 | --- | --- |

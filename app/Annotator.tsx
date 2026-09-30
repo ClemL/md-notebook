@@ -143,8 +143,7 @@ export function AnnotationLayer({ image }: { image: StoredImage }) {
 
 /**
  * The built-in annotator: arrows, lines, boxes, ellipses, freehand and text over the image,
- * stored as shapes rather than pixels. Tool keys match Excalidraw's, and double-clicking
- * anywhere drops a text label the way it does there.
+ * stored as shapes rather than pixels. Tool keys match Excalidraw's.
  */
 export default function Annotator({
   image,
@@ -278,6 +277,8 @@ export default function Annotator({
     const { x, y } = toImage(e);
 
     if (tool === "text") {
+      // Otherwise the browser's own mousedown focus change blurs the new input at once.
+      e.preventDefault();
       startText(e);
       return;
     }
@@ -365,7 +366,6 @@ export default function Annotator({
           ))}
         </span>
         <span className="spacer" />
-        <span className="editor-hint">double-click for text</span>
         <button onClick={undo} disabled={!shapes.length} title="Undo (Ctrl+Z)">
           Undo
         </button>
@@ -399,7 +399,6 @@ export default function Annotator({
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
             onPointerCancel={onPointerUp}
-            onDoubleClick={startText}
           >
             {shapes.map((s) => (
               <ShapeMark key={s.id} shape={s} imageWidth={image.width} />
