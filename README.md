@@ -101,7 +101,7 @@ the codebase, unused, so the feature can be wired back in.
 - **Undo / redo** (`Ctrl+Z`, `Ctrl+Shift+Z`) covers deletes, reorders, splits, merges, imports,
   checkbox conversions and *Delete all* — 30 steps deep. Typing collapses into one undo step per
   editing session, and destructive actions put an **Undo** button in the toast.
-- **Copy All** concatenates entries to the clipboard; **Export All** downloads them as
+- **Copy All** concatenates entries to the clipboard; **Export All** (⋯ menu, or `Ctrl+S`) downloads them as
   `md-notebook_yyyyMMdd_HHmm.md`; **Backup as .json** writes a lossless file including timestamps.
 - **Import.** Drag a `.md` file anywhere on the page (or use the ⋯ menu) to split it on `---` into
   entries; drop a `.json` backup to restore or append it.
@@ -111,6 +111,9 @@ the codebase, unused, so the feature can be wired back in.
   existing ones instead of below. `a` and `b` still insert relative to the selected entry.
 - **Compact mode** (⋯ menu) tightens spacing and type for small screens and long notebooks.
   Timestamps stay visible.
+- **Wide mode** (⋯ menu) lifts the 980px reading width so entries span the browser window.
+- **Entry size** sits beside each timestamp: the line count for a text entry, rows × columns for a
+  table entry (hover for the spelled-out form), and pixel dimensions and file size for an image.
 - **▾ All / ▸ All** in the header folds every entry at once, or unfolds them when all are already
   folded.
 - **The header** is titled **mdnb** to leave room for search. **The search box** takes the free width in the header, up to 480px, and gives it up first as the

@@ -44,6 +44,7 @@ const RICH_KEY = "md-notebook:richpaste";
 const TOP_KEY = "md-notebook:inserttop";
 const COMPACT_KEY = "md-notebook:compact";
 const HINT_KEY = "md-notebook:hint";
+const WIDE_KEY = "md-notebook:wide";
 const COLLAPSED_KEY = "md-notebook:collapsed";
 const HISTORY_LIMIT = 30;
 
@@ -76,6 +77,7 @@ function NotebookInner() {
   const [richPaste, setRichPaste] = useState(true);
   const [insertTop, setInsertTop] = useState(false);
   const [compact, setCompact] = useState(false);
+  const [wide, setWide] = useState(false);
   const [showHint, setShowHint] = useState(true);
   const [collapsedIds, setCollapsedIds] = useState<Record<string, boolean>>({});
   const [storageOk, setStorageOk] = useState(true);
@@ -168,6 +170,7 @@ function NotebookInner() {
     setRichPaste(localStorage.getItem(RICH_KEY) !== "0");
     setInsertTop(localStorage.getItem(TOP_KEY) === "1");
     setCompact(localStorage.getItem(COMPACT_KEY) === "1");
+    setWide(localStorage.getItem(WIDE_KEY) === "1");
     setShowHint(localStorage.getItem(HINT_KEY) !== "0");
     try {
       const saved: unknown = JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? "[]");
@@ -204,6 +207,10 @@ function NotebookInner() {
   useEffect(() => {
     if (loaded) localStorage.setItem(COMPACT_KEY, compact ? "1" : "0");
   }, [compact, loaded]);
+
+  useEffect(() => {
+    if (loaded) localStorage.setItem(WIDE_KEY, wide ? "1" : "0");
+  }, [wide, loaded]);
 
   useEffect(() => {
     if (loaded) localStorage.setItem(HINT_KEY, showHint ? "1" : "0");
@@ -571,6 +578,7 @@ function NotebookInner() {
     if (!text.trim()) return say("Nothing to export.");
     const name = `md-notebook_${timestamp()}.md`;
     downloadText(name, text);
+    // Export has no header button to light up, but it is still the last action, so Copy All dims.
     flash("export-all");
     say(`Exported ${name}`);
   }, [visible, separators, flash, say]);
@@ -829,7 +837,12 @@ function NotebookInner() {
 
   return (
     // data-ready flips once client state is restored; tests wait on it instead of racing hydration.
-    <div className="app" data-ready={loaded ? "true" : undefined} data-compact={compact ? "on" : undefined}>
+    <div
+      className="app"
+      data-ready={loaded ? "true" : undefined}
+      data-compact={compact ? "on" : undefined}
+      data-wide={wide ? "on" : undefined}
+    >
       <header className="bar">
         <span className="title" title="md-notebook">mdnb</span>
 
@@ -837,7 +850,7 @@ function NotebookInner() {
           + Paste
         </Btn>
         <Btn tip="New empty entry" hotkey="Ctrl+Shift+Enter" onClick={() => appendCell("")}>
-          + Empty
+          +
         </Btn>
         <Btn tip="Undo the last change" hotkey="Ctrl+Z" onClick={undo} disabled={!canUndo}>
           Undo
@@ -887,15 +900,6 @@ function NotebookInner() {
         >
           Copy{filtering ? ` (${visible.length})` : " All"}
         </Btn>
-        <Btn
-          tip={filtering ? "Download the filtered entries as .md" : "Download every entry as one .md file"}
-          hotkey="Ctrl+S"
-          onClick={exportAll}
-          disabled={!visible.length}
-          flash={flashed === "export-all"}
-        >
-          Export{filtering ? ` (${visible.length})` : " All"}
-        </Btn>
 
         <Dropdown label="Templates" tip="Insert a template" align="right">
           <span className="menu-label">Insert template</span>
@@ -907,6 +911,13 @@ function NotebookInner() {
         </Dropdown>
 
         <Dropdown label="⋯" tip="More actions" align="right">
+          <button
+            title={filtering ? "Download the filtered entries as .md" : "Download every entry as one .md file"}
+            onClick={exportAll}
+            disabled={!visible.length}
+          >
+            Export{filtering ? ` (${visible.length})` : " All"} <kbd>Ctrl+S</kbd>
+          </button>
           <button onClick={checkboxAll}>
             Checkbox All <kbd>t</kbd>
           </button>
@@ -931,6 +942,10 @@ function NotebookInner() {
           <label>
             <input type="checkbox" checked={compact} onChange={(e) => setCompact(e.target.checked)} />
             <span>Compact mode</span>
+          </label>
+          <label>
+            <input type="checkbox" checked={wide} onChange={(e) => setWide(e.target.checked)} />
+            <span>Wide mode</span>
           </label>
           <label>
             <input type="checkbox" checked={showHint} onChange={(e) => setShowHint(e.target.checked)} />
