@@ -35,6 +35,11 @@ the codebase, unused, so the feature can be wired back in.
   by the project name. It is rewritten to read as a path: `DataDownloader.SFTP >
   [StorageAccount.cs](url)`, with the account and project segments dropped. Only applies to a single
   `dev.azure.com` or `*.visualstudio.com` link followed by a `>` trail.
+- **Azure DevOps work-item lists.** Work items copied from a board or query arrive as the link with
+  its state run on after it: `[1898 Onboard …](…/_workitems/edit/1898)Resolved`. Each line is
+  rewritten to lead with the state, lowercased: `` `resolved` [1898 Onboard …](url) ``. A state on
+  the line after its link is picked up too. Applies to rich and plain-text paste, and only when every
+  line of the paste is a work-item link or its state.
 - **Azure DevOps URLs pasted bare.** A `dev.azure.com` URL pasted on its own — from the address
   bar, where there is no rich clipboard flavor to convert — becomes a link labelled with what it
   points at. Four shapes are recognized, and the pull-request shape is checked first:

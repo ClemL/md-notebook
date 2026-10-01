@@ -1161,6 +1161,24 @@ test("a bare Azure DevOps URL pastes as a link naming what it points at", async 
   await expect(page.locator(`.md a[href="${pr}"]`)).toHaveText("Model.Landing.Optum PR !2865");
 });
 
+test("a pasted work-item list leads each line with its state", async ({ page }) => {
+  const url = (id: number) => `https://dev.azure.com/inscriptrx/Org/_workitems/edit/${id}`;
+  const a = `[1897 Removed most recent RxSense file from blob storage](${url(1897)})`;
+  const b = `[1898 Onboard @Alyssa Hewson, start date 9/28](${url(1898)})`;
+  await page.getByRole("button", { name: /New empty entry/ }).click();
+  const ta = page.locator("textarea.editor");
+  await ta.evaluate((el, text) => {
+    const dt = new DataTransfer();
+    dt.setData("text/plain", text);
+    el.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+  }, `\n\n${a}Blocked\n\n${b}Resolved\n\n`);
+
+  await expect(ta).toHaveValue(`\`blocked\` ${a}\n\n\`resolved\` ${b}`);
+  await ta.press("Escape");
+  await expect(page.locator(".md p").first().locator("code")).toHaveText("blocked");
+  await expect(page.locator(`.md a[href="${url(1898)}"]`)).toHaveText("1898 Onboard @Alyssa Hewson, start date 9/28");
+});
+
 test("a dev.azure.com URL of no recognized shape is left to the browser", async ({ page }) => {
   const plain = "https://dev.azure.com/inscriptrx/Org/_workitems/edit/1403";
   await page.getByRole("button", { name: /New empty entry/ }).click();

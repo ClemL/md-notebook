@@ -7,7 +7,12 @@ import ImageCell from "./ImageCell";
 import { Cell, formatStamp, isImageCell } from "@/lib/markdown";
 import type { ImageView, StoredImage } from "@/lib/image";
 import { continueListOnEnter, insertAt, isUrl, wrapSelectionAsLink } from "@/lib/editor";
-import { htmlIsWorthConverting, htmlToMarkdown, rewriteAzureDevOpsUrl } from "@/lib/richPaste";
+import {
+  htmlIsWorthConverting,
+  htmlToMarkdown,
+  rewriteAzureDevOpsUrl,
+  statusFirstWorkItems,
+} from "@/lib/richPaste";
 import { deleteTableColumn, maybeTable, parseTable, sortTable } from "@/lib/table";
 
 const COLLAPSE_PX = 420;
@@ -179,6 +184,14 @@ export default function CellView({
     if (adoLink) {
       e.preventDefault();
       applyEdit(el, insertAt(el.value, start, end, adoLink));
+      return;
+    }
+
+    // A work-item list already in markdown gets its states moved to the front of each line.
+    const items = statusFirstWorkItems(plain);
+    if (items !== plain) {
+      e.preventDefault();
+      applyEdit(el, insertAt(el.value, start, end, items));
       return;
     }
 
