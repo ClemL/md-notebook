@@ -194,9 +194,11 @@ test("export writes a timestamped file and json backup round-trips", async ({ pa
   await addEntry(page, "first entry");
   await addEntry(page, "second entry");
 
+  // Export All lives in the ⋯ menu; Ctrl+S still exports without opening it.
+  await page.getByRole("button", { name: "More actions" }).click();
   const [md] = await Promise.all([
     page.waitForEvent("download"),
-    page.getByRole("button", { name: /Download every entry/ }).click(),
+    page.getByRole("button", { name: /^Export All/ }).click(),
   ]);
   expect(md.suggestedFilename()).toMatch(/^md-notebook_\d{8}_\d{4}\.md$/);
   const mdBody = await (await import("node:fs/promises")).readFile(await md.path(), "utf8");
@@ -527,17 +529,14 @@ test("an image entry opens full size and survives a reload", async ({ page }) =>
 test("an image entry exports as a caption, not base64", async ({ page }) => {
   await pasteImage(page);
   await addEntry(page, "a text entry");
-  const [download] = await Promise.all([
-    page.waitForEvent("download"),
-    page.getByRole("button", { name: /Download every entry/ }).click(),
-  ]);
+  const [download] = await Promise.all([page.waitForEvent("download"), page.keyboard.press("Control+s")]);
   const body = await (await import("node:fs/promises")).readFile(await download.path(), "utf8");
   expect(body).toContain("*(image pasted");
   expect(body).not.toContain("data:image/png;base64");
   expect(body).toContain("a text entry");
 });
 
-test("copy and export buttons show which action ran last", async ({ page }) => {
+test("copy buttons show which action ran last, and export clears them", async ({ page }) => {
   await addEntry(page, "first");
   await addEntry(page, "second");
 
@@ -550,9 +549,9 @@ test("copy and export buttons show which action ran last", async ({ page }) => {
   await expect(copyAll).toHaveAttribute("data-flash", "on");
   await expect(entryCopy).not.toHaveAttribute("data-flash", "on");
 
-  const exportAll = page.getByRole("button", { name: /Download every entry/ });
+  await page.getByRole("button", { name: "More actions" }).click();
+  const exportAll = page.getByRole("button", { name: /^Export All/ });
   await Promise.all([page.waitForEvent("download"), exportAll.click()]);
-  await expect(exportAll).toHaveAttribute("data-flash", "on");
   await expect(copyAll).not.toHaveAttribute("data-flash", "on");
 });
 
@@ -686,6 +685,36 @@ test("compact mode is a menu toggle that persists", async ({ page }) => {
   await page.keyboard.press("Escape");
   const normalHeight = await head.evaluate((el) => el.getBoundingClientRect().height);
   expect(compactHeight).toBeLessThan(normalHeight);
+});
+
+test("wide mode is a menu toggle that persists and widens entries", async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await addEntry(page, "an entry");
+  const cell = page.locator("section.cell").first();
+  const narrow = await cell.evaluate((el) => el.getBoundingClientRect().width);
+
+  await page.getByRole("button", { name: "More actions" }).click();
+  await page.getByText("Wide mode").click();
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".app")).toHaveAttribute("data-wide", "on");
+  const wide = await cell.evaluate((el) => el.getBoundingClientRect().width);
+  expect(wide).toBeGreaterThan(narrow + 400);
+
+  await page.reload();
+  await ready(page);
+  await expect(page.locator(".app")).toHaveAttribute("data-wide", "on");
+});
+
+test("text entries show their line count and tables their rows × columns", async ({ page }) => {
+  await addEntry(page, "one\ntwo\nthree");
+  await addEntry(page, "| a | b | c |\n| - | - | - |\n| 1 | 2 | 3 |\n| 4 | 5 | 6 |");
+  const cells = page.locator("section.cell");
+  await expect(cells.nth(0).locator(".cell-meta")).toHaveText("3 lines");
+  await expect(cells.nth(1).locator(".cell-meta")).toHaveText("2×3");
+  await expect(cells.nth(1).locator(".cell-meta")).toHaveAttribute("title", "2 rows × 3 columns");
+  expect(
+    await cells.nth(0).locator(".cell-meta").evaluate((el) => el.nextElementSibling?.classList.contains("stamp")),
+  ).toBe(true);
 });
 
 test("the hint line can be dismissed and brought back", async ({ page }) => {

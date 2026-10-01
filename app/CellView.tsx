@@ -214,7 +214,17 @@ export default function CellView({
   const hiddenLines = Math.max(0, lineCount - COLLAPSED_LINES);
 
   // An entry that is one markdown table and nothing else gets sort and column-delete controls.
-  const table = useMemo(() => (editing || raw ? null : parseTable(cell.text)), [cell.text, editing, raw]);
+  const parsedTable = useMemo(() => parseTable(cell.text), [cell.text]);
+  const table = editing || raw ? null : parsedTable;
+  // Size beside the timestamp, as image entries show dimensions: rows × columns for a table, lines otherwise.
+  const meta = parsedTable
+    ? `${parsedTable.rows.length}×${parsedTable.header.length}`
+    : `${lineCount} ${lineCount === 1 ? "line" : "lines"}`;
+  const metaTip = parsedTable
+    ? `${parsedTable.rows.length} ${parsedTable.rows.length === 1 ? "row" : "rows"} × ${parsedTable.header.length} ${
+        parsedTable.header.length === 1 ? "column" : "columns"
+      }`
+    : undefined;
   const [sorted, setSorted] = useState<TableTools["sorted"]>(null);
   // A hand edit can reorder the rows, after which the sort marker would be a claim it cannot back.
   useEffect(() => {
@@ -338,6 +348,9 @@ export default function CellView({
         {collapsed && hiddenLines > 0 && (
           <span className="collapsed-chip">+{hiddenLines} lines</span>
         )}
+        <span className="cell-meta" title={metaTip}>
+          {meta}
+        </span>
         <span className="stamp" title={`Created ${formatStamp(cell.createdAt)}`}>
           {formatStamp(cell.updatedAt)}
         </span>

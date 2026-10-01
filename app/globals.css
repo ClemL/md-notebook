@@ -79,6 +79,11 @@ a {
   padding-right: 16px;
 }
 
+/* Wide mode drops the reading-width cap so entries span the browser window. */
+.app[data-wide="on"] {
+  max-width: none;
+}
+
 header.bar {
   position: sticky;
   top: 0;
@@ -648,7 +653,8 @@ button[data-flash="on"]:hover:not(:disabled) {
 /* ---------- image entries ---------- */
 
 /* Dimensions and size, on the right just before the timestamp. */
-.image-meta {
+.image-meta,
+.cell-meta {
   font-size: 11px;
   color: var(--fg-dim);
   margin-right: 4px;
@@ -927,12 +933,14 @@ button.collapse-toggle {
   }
 
   /* Keeps its place just before the timestamp when the toolbar wraps. */
-  .cell-head .image-meta {
+  .cell-head .image-meta,
+  .cell-head .cell-meta {
     order: 1;
     margin-left: auto;
   }
 
-  .cell-head .image-meta + .stamp {
+  .cell-head .image-meta + .stamp,
+  .cell-head .cell-meta + .stamp {
     margin-left: 0;
   }
 }
@@ -965,7 +973,8 @@ button.collapse-toggle {
   }
 
   .cell-head .stamp,
-  .cell-head .image-meta {
+  .cell-head .image-meta,
+  .cell-head .cell-meta {
     display: none;
   }
 }
