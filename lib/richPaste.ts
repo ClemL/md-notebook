@@ -252,13 +252,15 @@ function basename(path: string): string {
 }
 
 /**
- * The label an Azure DevOps URL should read as, or null when it is not one of the four shapes
- * this understands. Narrow by design: anything unrecognized keeps the bare URL it came as.
+ * The label an Azure DevOps URL should read as, or null when it is not one of the shapes this
+ * understands. Narrow by design: anything unrecognized keeps the bare URL it came as.
  *
  *   D  /{org}/{project}/_git/{repo}/pullrequest/{n}   -> "{repo} PR !{n}"
  *   C  /{org}/{project}/_git/{repo}?version=GB{branch}&path=/{file}  -> "{branch} / {file}"
  *   B  /{org}/{project}/_git/{repo}?path=/{file}      -> "{file}"
- *   A  /{org}/{project}/_wiki/wikis/{wiki}/{id}/{page} -> "{page}"
+ *   A  /{org}/{project}/_wiki/wikis/{wiki}/{id}/{page} -> "{page}", hyphens read as spaces
+ *   E  /{org}/{project}/_workitems/edit/{id}          -> "Devops {id}"
+ *   E  /{org}/{project}/_workitems/edit/{id}#{c}      -> "Devops {id} / Comment {c}"
  *
  * `version` values other than a `GB` (git branch) prefix — `GT` tags, `GC` commits — are out of
  * scope and left unrewritten rather than guessed at.
@@ -294,10 +296,18 @@ export function azureDevOpsUrlLabel(raw: string): string | null {
     return branch ? `${branch} / ${file}` : file;
   }
 
-  // A — a wiki page: /{org}/{project}/_wiki/wikis/{wiki}/{pageId}/{pageName}.
+  // A — a wiki page: /{org}/{project}/_wiki/wikis/{wiki}/{pageId}/{pageName}. The wiki writes
+  // a space in a page name as "-" and a real hyphen as "%2D", so swap before decoding.
   if (parts[2] === "_wiki" && parts[3] === "wikis" && parts.length === 7 && /^\d+$/.test(parts[5])) {
-    const page = decodeSegment(parts[6]);
+    const page = decodeSegment(parts[6].replace(/-/g, " ")).trim();
     return page || null;
+  }
+
+  // E — a work item: /{org}/{project}/_workitems/edit/{id}, with an optional "#{commentId}"
+  // fragment pointing at one comment. Query strings such as "?view=edit" are ignored.
+  if (parts[2] === "_workitems" && parts[3] === "edit" && parts.length === 5 && /^\d+$/.test(parts[4])) {
+    const comment = url.hash.match(/^#(\d+)$/)?.[1];
+    return comment ? `Devops ${parts[4]} / Comment ${comment}` : `Devops ${parts[4]}`;
   }
 
   return null;
