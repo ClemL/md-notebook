@@ -3,6 +3,7 @@ import {
   blankTable,
   deleteTableColumn,
   maybeTable,
+  parseCsv,
   parseDelimited,
   parseTable,
   repairPipeTable,
@@ -119,5 +120,52 @@ describe("blank table templates", () => {
     expect(TEMPLATES.map((t) => t.label)).toEqual(
       expect.arrayContaining(["Table 2×2", "Table 3×3"]),
     );
+  });
+});
+
+describe("CSV paste", () => {
+  const SAMPLE = [
+    '"ServerName","ResourceGroup","Location","DatabaseName","Edition","Sku","ElasticPool","Status","BackupRedundancy","PitrDays","DiffBackupHours","LtrWeekly","LtrMonthly","LtrYearly","LtrWeekOfYear","LtrBackupCount","Flag_LowPitr","Flag_NoLtr","Error"',
+    '"bilhinscriptprod2","BILH","centralus","Prod","BusinessCritical","BC_Gen5",,"Online","Geo","7","12","P8W","P26W","P52W","1",,"False","False",',
+    '"bilhinscripttest2","BILH","centralus","Test","GeneralPurpose","GP_Gen5",,"Online","Geo","7","12","P4W","P8W","Off",,,"False","False",',
+    '"orginscriptprod2","Org","centralus","Prod","GeneralPurpose","GP_Gen5",,"Online","Geo","7","12","P4W","P8W","Off",,,"False","False",',
+  ].join("\r\n");
+
+  it("turns an exported CSV into a table, first row as the header, empty fields kept", () => {
+    const rows = parseCsv(SAMPLE)!;
+    expect(rows).toHaveLength(4);
+    expect(rows.every((r) => r.length === 19)).toBe(true);
+    expect(rows[0][0]).toBe("ServerName");
+    expect(rows[1].slice(5, 8)).toEqual(["BC_Gen5", "", "Online"]);
+    expect(rows[2][18]).toBe("");
+
+    const md = maybeTable(SAMPLE)!;
+    const lines = md.split("\n");
+    expect(lines).toHaveLength(5);
+    expect(lines[0].startsWith("| ServerName | ResourceGroup | Location |")).toBe(true);
+    expect(lines[1]).toBe(`| ${Array(19).fill("---").join(" | ")} |`);
+    expect(lines[2]).toContain("| BC_Gen5 |  | Online |");
+  });
+
+  it("handles commas, doubled quotes and line breaks inside quoted fields", () => {
+    const csv = 'name,note,count\n"Smith, J","said ""hi""",3\n"Lee","two\nlines",4';
+    expect(parseCsv(csv)).toEqual([
+      ["name", "note", "count"],
+      ["Smith, J", 'said "hi"', "3"],
+      ["Lee", "two lines", "4"],
+    ]);
+    // A comma inside a cell does not split it, and a pipe is escaped for markdown.
+    expect(maybeTable('a,b\n"x|y","1,2"')).toBe("| a | b |\n| --- | --- |\n| x\\|y | 1,2 |");
+  });
+
+  it("leaves prose with commas alone", () => {
+    expect(parseCsv("Hello, world.\nYes, sure.")).toBeNull();
+    expect(maybeTable("We met Kris, Srini and Teja.\nThen lunch, then the review.")).toBeNull();
+    // Rows of different widths are not a table.
+    expect(parseCsv("a,b,c\n1,2\n3,4,5")).toBeNull();
+    // A single row is not a table either.
+    expect(parseCsv('"a","b","c"')).toBeNull();
+    // An unterminated quote is not CSV.
+    expect(parseCsv('a,b,c\n"1,2,3')).toBeNull();
   });
 });

@@ -87,6 +87,11 @@ the codebase, unused, so the feature can be wired back in.
 - **Tabular paste becomes a table.** Markdown tables render on their own; what does not is text that
   only looks tabular. A tab-separated grid (Excel, a query result) is converted to a markdown table
   on paste, and pipe rows written without the `| --- |` delimiter row GFM requires have it inserted.
+- **CSV paste becomes a table too.** Comma-separated text as an export writes it — fields in
+  optional double quotes, `""` for a quote, commas and line breaks allowed inside quotes — is
+  converted with the first row as the header. Empty fields stay empty cells. To keep prose with
+  commas as prose, it needs at least two rows of exactly equal width and either a quoted field or
+  three or more columns.
 - **Table tools.** An entry that is a markdown table and nothing else gets two controls in each
   header cell: ↕ sorts by that column (click again for descending) and ✕ deletes the column. Numbers,
   currency, `1,200`, percentages and accounting negatives `(4)` sort as numbers; text sorts
