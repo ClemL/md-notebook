@@ -37,7 +37,9 @@ the codebase, unused, so the feature can be wired back in.
   `dev.azure.com` or `*.visualstudio.com` link followed by a `>` trail.
 - **Azure DevOps URLs pasted bare.** A `dev.azure.com` URL pasted on its own — from the address
   bar, where there is no rich clipboard flavor to convert — becomes a link labelled with what it
-  points at. These shapes are recognized, and the pull-request shape is checked first:
+  points at, whether pasted into an open entry or through **+ Paste**. Edge's "friendly link" copy,
+  which carries the URL only in its HTML flavor under the page title, is read the same way. These
+  shapes are recognized, and the pull-request shape is checked first:
 
   | Pasted URL | Becomes |
   | --- | --- |

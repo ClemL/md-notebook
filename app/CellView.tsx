@@ -7,7 +7,7 @@ import ImageCell from "./ImageCell";
 import { Cell, formatStamp, isImageCell } from "@/lib/markdown";
 import type { ImageView, StoredImage } from "@/lib/image";
 import { continueListOnEnter, insertAt, isUrl, wrapSelectionAsLink } from "@/lib/editor";
-import { htmlIsWorthConverting, htmlToMarkdown, rewriteAzureDevOpsUrl } from "@/lib/richPaste";
+import { azureDevOpsLinkFromClipboard, htmlIsWorthConverting, htmlToMarkdown } from "@/lib/richPaste";
 import { deleteTableColumn, maybeTable, parseTable, sortTable } from "@/lib/table";
 
 const COLLAPSE_PX = 420;
@@ -173,9 +173,10 @@ export default function CellView({
       return;
     }
 
-    // A bare Azure DevOps URL on its own becomes a link labelled with what it points at:
-    // the wiki page, the file, the branch and file, or the pull request.
-    const adoLink = rewriteAzureDevOpsUrl(plain);
+    // A bare Azure DevOps URL on its own becomes a link labelled with what it points at: the
+    // work item, wiki page, file, branch and file, or pull request. Edge's "friendly link" copy
+    // carries the URL only in its HTML flavor, so that is read too.
+    const adoLink = azureDevOpsLinkFromClipboard(html, plain);
     if (adoLink) {
       e.preventDefault();
       applyEdit(el, insertAt(el.value, start, end, adoLink));
