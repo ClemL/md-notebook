@@ -1162,7 +1162,7 @@ test("a bare Azure DevOps URL pastes as a link naming what it points at", async 
 });
 
 test("a dev.azure.com URL of no recognized shape is left to the browser", async ({ page }) => {
-  const plain = "https://dev.azure.com/inscriptrx/Org/_workitems/edit/1403";
+  const plain = "https://dev.azure.com/inscriptrx/Org/_build/results?buildId=1403";
   await page.getByRole("button", { name: /New empty entry/ }).click();
   const ta = page.locator("textarea.editor");
 
@@ -1334,4 +1334,32 @@ test("the search box shrinks before the header wraps", async ({ page }) => {
   expect(narrow).toBeLessThan(wide);
   expect(narrow).toBeGreaterThanOrEqual(120);
   expect((await header.boundingBox())!.height).toBeLessThanOrEqual(oneLine + 1);
+});
+
+test("a pasted work item URL becomes a Devops link, with the comment when there is one", async ({ page }) => {
+  const paste = async (url: string) => {
+    await page.getByRole("button", { name: /New empty entry/ }).click();
+    const ta = page.locator("textarea.editor");
+    await ta.evaluate((el, u) => {
+      const dt = new DataTransfer();
+      dt.setData("text/plain", u);
+      el.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+    }, url);
+    return ta;
+  };
+
+  const story = "https://dev.azure.com/inscriptrx/Org/_workitems/edit/1973/?view=edit";
+  let ta = await paste(story);
+  await expect(ta).toHaveValue(`[Devops 1973](${story})`);
+  await ta.press("Escape");
+  await expect(page.locator(`.md a[href="${story}"]`)).toHaveText("Devops 1973");
+
+  const comment = "https://dev.azure.com/inscriptrx/Org/_workitems/edit/1973#16306064";
+  ta = await paste(comment);
+  await expect(ta).toHaveValue(`[Devops 1973 / Comment 16306064](${comment})`);
+  await ta.press("Escape");
+
+  const wiki = "https://dev.azure.com/inscriptrx/Org/_wiki/wikis/ScriptWellRx.wiki/1140/2026-10-02-Sprint-Review-60";
+  ta = await paste(wiki);
+  await expect(ta).toHaveValue(`[2026 10 02 Sprint Review 60](${wiki})`);
 });

@@ -37,19 +37,21 @@ the codebase, unused, so the feature can be wired back in.
   `dev.azure.com` or `*.visualstudio.com` link followed by a `>` trail.
 - **Azure DevOps URLs pasted bare.** A `dev.azure.com` URL pasted on its own — from the address
   bar, where there is no rich clipboard flavor to convert — becomes a link labelled with what it
-  points at. Four shapes are recognized, and the pull-request shape is checked first:
+  points at. These shapes are recognized, and the pull-request shape is checked first:
 
   | Pasted URL | Becomes |
   | --- | --- |
   | `…/_git/{repo}/pullrequest/{n}` | `[{repo} PR !{n}](url)` |
   | `…/_git/{repo}?version=GB{branch}&path=/{file}` | `[{branch} / {file}](url)` |
   | `…/_git/{repo}?path=/{file}` | `[{file}](url)` |
-  | `…/_wiki/wikis/{wiki}/{id}/{page}` | `[{page}](url)` |
+  | `…/_wiki/wikis/{wiki}/{id}/{page}` | `[{page}](url)`, hyphens read as spaces |
+  | `…/_workitems/edit/{id}` (any query) | `[Devops {id}](url)` |
+  | `…/_workitems/edit/{id}#{commentId}` | `[Devops {id} / Comment {commentId}](url)` |
 
   Branch names and file paths are URL-decoded, so `GBfeature%2F1403` reads as `feature/1403`, and
   `version` and `path` are read by name rather than position. As narrow as the breadcrumb rule:
-  the paste has to be nothing but the URL, and anything else — a `GT` tag, a `GC` commit, a work
-  item, a bare project URL, a URL sitting inside a sentence — is left exactly as pasted.
+  the paste has to be nothing but the URL, and anything else — a `GT` tag, a `GC` commit, a build, a
+  bare project URL, a URL sitting inside a sentence — is left exactly as pasted.
 - **Duplicate detection.** Pasting a string that already exists verbatim jumps to that entry and
   says so instead of creating a twin; the toast offers *Add anyway*.
 - **Images.** Paste or drop a screenshot anywhere to store it as an image entry: a thumbnail that
