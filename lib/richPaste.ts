@@ -322,6 +322,26 @@ export function rewriteAzureDevOpsUrl(text: string): string | null {
   return label ? `[${label}](${text.trim()})` : null;
 }
 
+/**
+ * The Azure DevOps link for a paste, read from whichever clipboard flavor carries the URL: the
+ * plain text when it is the bare URL, or an HTML flavor that is nothing but one link to it. The
+ * second is what Edge's "friendly link" copy puts on the clipboard, where the plain text may be
+ * the page title rather than the address. HTML with anything beyond that one link is left to the
+ * rich-paste conversion, so a document that merely contains a link keeps its other content.
+ */
+export function azureDevOpsLinkFromClipboard(html: string, plain: string): string | null {
+  const fromPlain = rewriteAzureDevOpsUrl(plain);
+  if (fromPlain || !html.trim() || typeof DOMParser === "undefined") return fromPlain;
+
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  doc.querySelectorAll("style,script,meta,link").forEach((el) => el.remove());
+  const anchors = doc.querySelectorAll("a[href]");
+  if (anchors.length !== 1) return null;
+  const squash = (t: string | null) => (t ?? "").replace(/\s+/g, " ").trim();
+  if (squash(doc.body.textContent) !== squash(anchors[0].textContent)) return null;
+  return rewriteAzureDevOpsUrl(anchors[0].getAttribute("href") ?? "");
+}
+
 /** Converts an HTML clipboard flavor to markdown; returns null when conversion is unavailable. */
 export async function htmlToMarkdown(html: string): Promise<string | null> {
   const convert = await getConverter();
@@ -349,6 +369,10 @@ export async function readClipboardSmart(rich: boolean): Promise<ClipboardPayloa
         const plain = item.types.includes("text/plain")
           ? await (await item.getType("text/plain")).text()
           : "";
+        // A bare Azure DevOps link gets its readable label here too, as it does when pasted into
+        // an open entry, rather than being converted under the page title the browser attached.
+        const ado = azureDevOpsLinkFromClipboard(html, plain);
+        if (ado) return { text: ado, rich: false };
         if (htmlIsWorthConverting(html, plain)) {
           const md = await htmlToMarkdown(html);
           if (md) return { text: md, rich: true };
@@ -361,5 +385,6 @@ export async function readClipboardSmart(rich: boolean): Promise<ClipboardPayloa
   }
 
   if (!nav.clipboard.readText) throw new Error("Clipboard read is not available in this browser.");
-  return { text: await nav.clipboard.readText(), rich: false };
+  const text = await nav.clipboard.readText();
+  return { text: rewriteAzureDevOpsUrl(text) ?? text, rich: false };
 }
