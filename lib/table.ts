@@ -60,10 +60,68 @@ export function repairPipeTable(text: string): string | null {
   return rowsToMarkdownTable(rows);
 }
 
+/**
+ * Comma-separated values as a CSV export writes them (RFC 4180): fields optionally in double
+ * quotes, "" for a literal quote, and commas or line breaks allowed inside quotes. The first row
+ * is taken as the header. Line breaks inside a field become spaces, since a table cell is one line.
+ *
+ * Prose has commas too, so the guards are strict: at least two rows, every row exactly as wide as
+ * the header, and either a quoted field somewhere or at least three columns. Text with pipe rows
+ * is left to the pipe-table repair.
+ */
+export function parseCsv(text: string): string[][] | null {
+  const src = text.replace(/\r\n?/g, "\n").trim();
+  if (!src.includes(",") || /^\s*\|/m.test(src)) return null;
+
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = "";
+  let quoted = false;
+  let sawQuote = false;
+  for (let i = 0; i < src.length; i += 1) {
+    const ch = src[i];
+    if (quoted) {
+      if (ch === '"' && src[i + 1] === '"') {
+        field += '"';
+        i += 1;
+      } else if (ch === '"') {
+        quoted = false;
+      } else {
+        field += ch === "\n" ? " " : ch;
+      }
+    } else if (ch === '"' && !field.trim()) {
+      quoted = true;
+      sawQuote = true;
+      field = "";
+    } else if (ch === ",") {
+      row.push(field);
+      field = "";
+    } else if (ch === "\n") {
+      row.push(field);
+      if (row.some((f) => f.trim())) rows.push(row);
+      row = [];
+      field = "";
+    } else {
+      field += ch;
+    }
+  }
+  if (quoted) return null;
+  row.push(field);
+  if (row.some((f) => f.trim())) rows.push(row);
+
+  if (rows.length < 2) return null;
+  const width = rows[0].length;
+  if (width < 2 || rows.some((r) => r.length !== width)) return null;
+  if (!sawQuote && width < 3) return null;
+  return rows.map((r) => r.map((f) => f.trim()));
+}
+
 /** Markdown table for tabular text, or null when the text is not tabular. */
 export function maybeTable(text: string): string | null {
   const delimited = parseDelimited(text);
   if (delimited) return rowsToMarkdownTable(delimited);
+  const csv = parseCsv(text);
+  if (csv) return rowsToMarkdownTable(csv);
   return repairPipeTable(text);
 }
 

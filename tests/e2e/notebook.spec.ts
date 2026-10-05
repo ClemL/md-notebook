@@ -1416,3 +1416,36 @@ test("an Edge friendly link pasted into an open entry gets the Devops label", as
   }, url);
   await expect(ta).toHaveValue(`See [the bug](${url}) before release.`);
 });
+
+test("a pasted CSV becomes a table with the first row as its header", async ({ page }) => {
+  const csv = [
+    '"ServerName","ResourceGroup","Location","DatabaseName","Edition","Sku","ElasticPool","Status","BackupRedundancy","PitrDays","DiffBackupHours","LtrWeekly","LtrMonthly","LtrYearly","LtrWeekOfYear","LtrBackupCount","Flag_LowPitr","Flag_NoLtr","Error"',
+    '"bilhinscriptprod2","BILH","centralus","Prod","BusinessCritical","BC_Gen5",,"Online","Geo","7","12","P8W","P26W","P52W","1",,"False","False",',
+    '"bilhinscripttest2","BILH","centralus","Test","GeneralPurpose","GP_Gen5",,"Online","Geo","7","12","P4W","P8W","Off",,,"False","False",',
+    '"orginscriptprod2","Org","centralus","Prod","GeneralPurpose","GP_Gen5",,"Online","Geo","7","12","P4W","P8W","Off",,,"False","False",',
+  ].join("\n");
+
+  // Into an open entry.
+  await page.getByRole("button", { name: /New empty entry/ }).click();
+  const ta = page.locator("textarea.editor");
+  await ta.evaluate((el, text) => {
+    const dt = new DataTransfer();
+    dt.setData("text/plain", text);
+    el.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+  }, csv);
+  await expect(ta).toHaveValue(/^\| ServerName \| ResourceGroup \|/);
+  await ta.press("Escape");
+
+  const table = page.locator("section.cell .md table").first();
+  await expect(table.locator("thead th")).toHaveCount(19);
+  await expect(table.locator("tbody tr")).toHaveCount(3);
+  await expect(table.locator("thead th").first()).toContainText("ServerName");
+  await expect(table.locator("tbody tr").first().locator("td").nth(5)).toHaveText("BC_Gen5");
+  // It is a table entry like any other, so the sort tools are there.
+  await expect(page.getByRole("button", { name: "Sort by column 1", exact: true })).toHaveCount(1);
+
+  // Through + Paste as well.
+  await page.evaluate((text) => navigator.clipboard.writeText(text), csv.replace("Prod", "Prod2"));
+  await page.getByRole("button", { name: /New entry from clipboard/ }).click();
+  await expect(page.locator("textarea.editor")).toHaveValue(/^\| ServerName \| ResourceGroup \|/);
+});
