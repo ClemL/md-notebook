@@ -1254,3 +1254,20 @@ button.swatch.on {
     padding: 4px 6px;
   }
 }
+
+/* "All images" row in the ⋯ menu: a label with the three size buttons beside it. */
+.menu-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--fg-dim);
+}
+
+.menu .menu-row .view-group button {
+  width: auto;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+}

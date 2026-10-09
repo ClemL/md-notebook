@@ -117,6 +117,25 @@ test("+📋 appends entries to the clipboard with a --- rule between them", asyn
   expect(text).toContain("second finding");
 });
 
+test("append and checkbox buttons turn green once used, like copy", async ({ page }) => {
+  await addEntry(page, "first finding");
+  const cell = page.locator("section.cell").first();
+  const append = cell.getByRole("button", { name: /Append this entry to the clipboard/ });
+  const check = cell.getByRole("button", { name: /Prefix every line/ });
+  const copy = cell.getByRole("button", { name: /Copy this entry/ });
+
+  await append.click();
+  await expect(append).toHaveAttribute("data-flash", "on");
+
+  await check.click();
+  await expect(check).toHaveAttribute("data-flash", "on");
+  await expect(append).not.toHaveAttribute("data-flash", "on");
+
+  await copy.click();
+  await expect(copy).toHaveAttribute("data-flash", "on");
+  await expect(check).not.toHaveAttribute("data-flash", "on");
+});
+
 test("code blocks expose a copy button", async ({ page }) => {
   await addEntry(page, "```sql\nSELECT 1;\n```");
   await page.locator(".codeblock").hover();
@@ -1264,6 +1283,39 @@ test("an image can be shown as a thumbnail, fit to width, or 1:1", async ({ page
   await expect(
     page.locator("section.cell.image-cell").getByRole("button", { name: /original size/ }),
   ).toHaveAttribute("aria-pressed", "true");
+});
+
+test("the menu sets every image, and new pastes, to one size", async ({ page }) => {
+  await pasteImage(page, [1200, 300]);
+  const pressed = (name: RegExp) =>
+    page.locator("section.cell.image-cell").getByRole("button", { name });
+  await expect(pressed(/small thumbnail/).first()).toHaveText("Tbn");
+
+  await page.getByRole("button", { name: "More actions" }).click();
+  await page.getByRole("group", { name: "All images" }).getByRole("button", { name: "Fit W" }).click();
+  await expect(pressed(/Fit the image to the width/).first()).toHaveAttribute("aria-pressed", "true");
+
+  await pasteImage(page, [200, 100], 2);
+  await expect(pressed(/Fit the image to the width/).nth(1)).toHaveAttribute("aria-pressed", "true");
+
+  await page.reload();
+  await ready(page);
+  await expect(pressed(/Fit the image to the width/)).toHaveCount(2);
+  for (const i of [0, 1]) {
+    await expect(pressed(/Fit the image to the width/).nth(i)).toHaveAttribute("aria-pressed", "true");
+  }
+});
+
+test("an image entry downloads as a .png", async ({ page }) => {
+  await pasteImage(page, [120, 80]);
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.locator("section.cell.image-cell").getByRole("button", { name: /Download this image/ }).click(),
+  ]);
+  expect(download.suggestedFilename()).toMatch(/^120x80_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}\.png$/);
+  const fs = await import("node:fs/promises");
+  const bytes = await fs.readFile(await download.path());
+  expect(bytes.subarray(1, 4).toString()).toBe("PNG");
 });
 
 test("image entries move up and down like any other entry", async ({ page }) => {

@@ -2,17 +2,17 @@
 
 import { useEffect, useState } from "react";
 import Annotator, { AnnotationLayer } from "./Annotator";
-import Btn from "./Btn";
-import { Cell, formatStamp } from "@/lib/markdown";
-import { copyImage, formatBytes, type ImageView, type StoredImage } from "@/lib/image";
+import Btn, { DownloadIcon } from "./Btn";
+import { Cell, cellFileName, downloadBlob, formatStamp } from "@/lib/markdown";
+import { copyImage, flattenAnnotations, formatBytes, type ImageView, type StoredImage } from "@/lib/image";
 import type { Shape } from "@/lib/annotate";
 
 /** Where the Excalidraw button sends you. A self-hosted instance can be swapped in here. */
 export const EXCALIDRAW_URL = "https://excalidraw.com/";
 
 /** The ways an entry can show its image; the thumbnail is what a fresh paste gets. */
-const VIEWS: { view: ImageView; label: string; tip: string }[] = [
-  { view: "thumb", label: "Thumb", tip: "Show a small thumbnail" },
+export const VIEWS: { view: ImageView; label: string; tip: string }[] = [
+  { view: "thumb", label: "Tbn", tip: "Show a small thumbnail" },
   { view: "width", label: "Fit W", tip: "Fit the image to the width of the entry" },
   { view: "original", label: "1:1", tip: "Show the image at its original size" },
 ];
@@ -100,6 +100,18 @@ export default function ImageCell({
     );
   };
 
+  /** Saves the image as a PNG, with any arrows and boxes painted on as the copy does. */
+  const download = async () => {
+    try {
+      const blob = await flattenAnnotations(image);
+      const name = cellFileName(`${image.width}x${image.height}`, image.addedAt, "png");
+      downloadBlob(name, blob);
+      onNotify(`Downloaded ${name}`);
+    } catch {
+      onNotify("Download failed — the image could not be encoded.");
+    }
+  };
+
   return (
     <section
       id={`cell-${cell.id}`}
@@ -139,6 +151,9 @@ export default function ImageCell({
         </Btn>
         <Btn tip="Copy the image to the clipboard" hotkey="c" flash={flashed} onClick={onCopy}>
           Copy
+        </Btn>
+        <Btn className="download" tip="Download this image as a .png file" onClick={download}>
+          <DownloadIcon />
         </Btn>
         {canMerge && (
           <Btn tip="Merge with the image below into one image" hotkey="Shift+M" onClick={onMerge}>

@@ -96,9 +96,9 @@ export function formatStamp(ms: number): string {
  * File name for one entry downloaded on its own: the size label from the cell header, then its
  * stamp, both made filename-safe — "4×3_2026-10-07_14-40.md", "12-lines_2026-10-07_14-40.md".
  */
-export function cellFileName(meta: string, ms: number): string {
+export function cellFileName(meta: string, ms: number, ext = "md"): string {
   const stamp = formatStamp(ms).replace(" ", "_").replace(":", "-");
-  return `${meta.trim().replace(/\s+/g, "-")}_${stamp}.md`;
+  return `${meta.trim().replace(/\s+/g, "-")}_${stamp}.${ext}`;
 }
 
 export function joinCells(cells: Cell[], separators: boolean): string {
@@ -279,7 +279,10 @@ export async function appendToClipboard(text: string): Promise<void> {
 }
 
 export function downloadText(filename: string, text: string, mime = "text/markdown"): void {
-  const blob = new Blob([text], { type: `${mime};charset=utf-8` });
+  downloadBlob(filename, new Blob([text], { type: `${mime};charset=utf-8` }));
+}
+
+export function downloadBlob(filename: string, blob: Blob): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
