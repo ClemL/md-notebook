@@ -110,6 +110,8 @@ test("+📋 appends entries to the clipboard with a --- rule between them", asyn
   await buttons.nth(0).click();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain("first finding");
   await buttons.nth(1).click();
+  // Appending reads the clipboard and then writes it, so wait for the second write to land.
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain("second finding");
   const text = await page.evaluate(() => navigator.clipboard.readText());
   expect(text).toContain("my report\n\n---\n\n");
   expect(text.split("\n\n---\n\n")).toHaveLength(3);
