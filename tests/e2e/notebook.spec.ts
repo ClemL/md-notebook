@@ -102,6 +102,21 @@ test("the download button saves one entry as a .md file named by its size and st
   expect(await fs.readFile(await download.path(), "utf8")).toContain("| 4 | 5 | 6 |");
 });
 
+test("+📋 appends entries to the clipboard with a --- rule between them", async ({ page }) => {
+  await addEntry(page, "first finding");
+  await addEntry(page, "second finding");
+  await page.evaluate(() => navigator.clipboard.writeText("my report"));
+  const buttons = page.getByRole("button", { name: /Append this entry to the clipboard/ });
+  await buttons.nth(0).click();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain("first finding");
+  await buttons.nth(1).click();
+  const text = await page.evaluate(() => navigator.clipboard.readText());
+  expect(text).toContain("my report\n\n---\n\n");
+  expect(text.split("\n\n---\n\n")).toHaveLength(3);
+  expect(text).toContain("first finding");
+  expect(text).toContain("second finding");
+});
+
 test("code blocks expose a copy button", async ({ page }) => {
   await addEntry(page, "```sql\nSELECT 1;\n```");
   await page.locator(".codeblock").hover();

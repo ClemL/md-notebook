@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  appendSection,
   cellFileName,
   joinCells,
   makeBackup,
@@ -150,5 +151,15 @@ describe("cellFileName", () => {
 
   it("joins a spaced label with hyphens", () => {
     expect(cellFileName("12 lines", at)).toBe("12-lines_2026-10-07_14-40.md");
+  });
+});
+
+describe("appendSection", () => {
+  it("starts with the section alone when the clipboard is empty", () => {
+    expect(appendSection("  \n", "alpha\n")).toBe("alpha\n");
+  });
+
+  it("separates sections with a --- rule", () => {
+    expect(appendSection("alpha\n", "beta")).toBe("alpha\n\n---\n\nbeta\n");
   });
 });

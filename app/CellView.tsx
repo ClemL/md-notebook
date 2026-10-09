@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Btn from "./Btn";
 import MarkdownView, { type TableTools } from "./MarkdownView";
 import ImageCell from "./ImageCell";
-import { Cell, cellFileName, downloadText, formatStamp, isImageCell } from "@/lib/markdown";
+import { Cell, appendToClipboard, cellFileName, downloadText, formatStamp, isImageCell } from "@/lib/markdown";
 import type { ImageView, StoredImage } from "@/lib/image";
 import { continueListOnEnter, insertAt, isUrl, wrapSelectionAsLink } from "@/lib/editor";
 import {
@@ -239,6 +239,15 @@ export default function CellView({
         parsedTable.header.length === 1 ? "column" : "columns"
       }`
     : undefined;
+  const appendCell = async () => {
+    if (!cell.text.trim()) return onNotify("Nothing to append.");
+    try {
+      await appendToClipboard(cell.text);
+      onNotify("Appended to the clipboard.");
+    } catch {
+      onNotify("Append failed — the browser blocked clipboard access.");
+    }
+  };
   const downloadCell = () => {
     if (!cell.text.trim()) return onNotify("Nothing to download.");
     const name = cellFileName(meta, cell.updatedAt);
@@ -339,6 +348,13 @@ export default function CellView({
           onClick={onCopy}
         >
           Copy
+        </Btn>
+        <Btn
+          tip="Append this entry to the clipboard, after a --- rule"
+          onMouseDown={keepFocus}
+          onClick={appendCell}
+        >
+          +📋
         </Btn>
         <Btn
           className="download"
