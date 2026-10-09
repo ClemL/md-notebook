@@ -79,6 +79,29 @@ test("rendered task checkboxes write back to the markdown source", async ({ page
   await expect(page.locator("textarea.editor")).toHaveValue("* [ ] first\n* [ ] second");
 });
 
+test("a checked task is struck through, and its unchecked sub-task is not", async ({ page }) => {
+  await addEntry(page, "* [x] done\n  * [ ] open sub-task\n* [ ] open");
+  const done = page.locator(".md li.task").first();
+  await expect(done).toHaveClass(/\bdone\b/);
+  await expect(done.locator("> .task-text")).toHaveCSS("text-decoration-line", "line-through");
+  await expect(done.locator("li.task > .task-text")).toHaveCSS("text-decoration-line", "none");
+  await expect(page.locator(".md li.task").last().locator("> .task-text")).toHaveCSS("text-decoration-line", "none");
+
+  await page.locator('.md li.task input[type="checkbox"]').last().check();
+  await expect(page.locator(".md li.task").last()).toHaveClass(/\bdone\b/);
+});
+
+test("the download button saves one entry as a .md file named by its size and stamp", async ({ page }) => {
+  await addEntry(page, "| a | b | c |\n|---|---|---|\n| 1 | 2 | 3 |\n| 4 | 5 | 6 |");
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("button", { name: /Download this entry/ }).click(),
+  ]);
+  expect(download.suggestedFilename()).toMatch(/^2×3_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}\.md$/);
+  const fs = await import("node:fs/promises");
+  expect(await fs.readFile(await download.path(), "utf8")).toContain("| 4 | 5 | 6 |");
+});
+
 test("code blocks expose a copy button", async ({ page }) => {
   await addEntry(page, "```sql\nSELECT 1;\n```");
   await page.locator(".codeblock").hover();
@@ -1354,7 +1377,7 @@ test("the search box shrinks before the header wraps", async ({ page }) => {
   expect((await header.boundingBox())!.height).toBeLessThanOrEqual(oneLine + 1);
 });
 
-test("a pasted work item URL becomes a Devops link, with the comment when there is one", async ({ page }) => {
+test("a pasted work item URL becomes a Story link, with the comment when there is one", async ({ page }) => {
   const paste = async (url: string) => {
     await page.getByRole("button", { name: /New empty entry/ }).click();
     const ta = page.locator("textarea.editor");
@@ -1368,13 +1391,13 @@ test("a pasted work item URL becomes a Devops link, with the comment when there 
 
   const story = "https://dev.azure.com/inscriptrx/Org/_workitems/edit/1973/?view=edit";
   let ta = await paste(story);
-  await expect(ta).toHaveValue(`[Devops 1973](${story})`);
+  await expect(ta).toHaveValue(`[Story 1973](${story})`);
   await ta.press("Escape");
-  await expect(page.locator(`.md a[href="${story}"]`)).toHaveText("Devops 1973");
+  await expect(page.locator(`.md a[href="${story}"]`)).toHaveText("Story 1973");
 
   const comment = "https://dev.azure.com/inscriptrx/Org/_workitems/edit/1973#16306064";
   ta = await paste(comment);
-  await expect(ta).toHaveValue(`[Devops 1973 / Comment 16306064](${comment})`);
+  await expect(ta).toHaveValue(`[Story 1973 / Comment 16306064](${comment})`);
   await ta.press("Escape");
 
   const wiki = "https://dev.azure.com/inscriptrx/Org/_wiki/wikis/ScriptWellRx.wiki/1140/2026-10-02-Sprint-Review-60";
@@ -1393,11 +1416,11 @@ test("+ Paste labels Azure DevOps links too, plain or as an Edge friendly link",
 
   const comment = "https://dev.azure.com/inscriptrx/Org/_workitems/edit/1968#16302017";
   await page.evaluate((u) => navigator.clipboard.writeText(u), comment);
-  expect(await viaPasteButton()).toBe(`[Devops 1968 / Comment 16302017](${comment})`);
+  expect(await viaPasteButton()).toBe(`[Story 1968 / Comment 16302017](${comment})`);
 
   const story = "https://dev.azure.com/inscriptrx/Org/_workitems/edit/1895/?view=edit";
   await page.evaluate((u) => navigator.clipboard.writeText(u), story);
-  expect(await viaPasteButton()).toBe(`[Devops 1895](${story})`);
+  expect(await viaPasteButton()).toBe(`[Story 1895](${story})`);
 
   // Edge "friendly link": the URL only in the HTML flavor, the page title as plain text.
   const edge = "https://dev.azure.com/inscriptrx/Org/_workitems/edit/1900";
@@ -1409,10 +1432,10 @@ test("+ Paste labels Azure DevOps links too, plain or as an Edge friendly link",
       }),
     ]);
   }, edge);
-  expect(await viaPasteButton()).toBe(`[Devops 1900](${edge})`);
+  expect(await viaPasteButton()).toBe(`[Story 1900](${edge})`);
 });
 
-test("an Edge friendly link pasted into an open entry gets the Devops label", async ({ page }) => {
+test("an Edge friendly link pasted into an open entry gets the Story label", async ({ page }) => {
   const url = "https://dev.azure.com/inscriptrx/Org/_workitems/edit/1968#16302017";
   await page.getByRole("button", { name: /New empty entry/ }).click();
   const ta = page.locator("textarea.editor");
@@ -1422,7 +1445,7 @@ test("an Edge friendly link pasted into an open entry gets the Devops label", as
     dt.setData("text/plain", "Bug 1968: Loader times out - Boards");
     el.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
   }, url);
-  await expect(ta).toHaveValue(`[Devops 1968 / Comment 16302017](${url})`);
+  await expect(ta).toHaveValue(`[Story 1968 / Comment 16302017](${url})`);
 
   // HTML carrying more than the one link is a document, and converts as usual.
   await ta.fill("");

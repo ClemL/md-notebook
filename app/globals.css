@@ -586,8 +586,18 @@ button.expand.collapse {
 }
 
 /* In a loose list each item's text is wrapped in <p>; keep it beside the checkbox. */
-.md li.task > p:first-of-type {
+.md li.task > .task-text > p:first-of-type {
   display: inline;
+}
+
+.md li.task > .task-text {
+  display: inline;
+}
+
+/* A checked task reads as finished: struck through and dimmed; its sub-list keeps its own state. */
+.md li.task.done > .task-text {
+  text-decoration: line-through;
+  color: var(--fg-dim);
 }
 
 .md li.task > input[type="checkbox"] {

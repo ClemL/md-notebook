@@ -92,6 +92,15 @@ export function formatStamp(ms: number): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
+/**
+ * File name for one entry downloaded on its own: the size label from the cell header, then its
+ * stamp, both made filename-safe — "4×3_2026-10-07_14-40.md", "12-lines_2026-10-07_14-40.md".
+ */
+export function cellFileName(meta: string, ms: number): string {
+  const stamp = formatStamp(ms).replace(" ", "_").replace(":", "-");
+  return `${meta.trim().replace(/\s+/g, "-")}_${stamp}.md`;
+}
+
 export function joinCells(cells: Cell[], separators: boolean): string {
   const bodies = cells
     .map((c) => (isImageCell(c) ? imagePlaceholder(c) : c.text.trim()))

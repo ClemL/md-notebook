@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  cellFileName,
   joinCells,
   makeBackup,
   makeCell,
@@ -137,5 +138,17 @@ describe("parseStored", () => {
 describe("timestamp", () => {
   it("formats as yyyyMMdd_HHmm", () => {
     expect(timestamp(new Date(2026, 8, 12, 7, 5))).toBe("20260912_0705");
+  });
+});
+
+describe("cellFileName", () => {
+  const at = new Date(2026, 9, 7, 14, 40).getTime();
+
+  it("names a table entry by its size and stamp", () => {
+    expect(cellFileName("4×3", at)).toBe("4×3_2026-10-07_14-40.md");
+  });
+
+  it("joins a spaced label with hyphens", () => {
+    expect(cellFileName("12 lines", at)).toBe("12-lines_2026-10-07_14-40.md");
   });
 });

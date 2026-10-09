@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Btn from "./Btn";
 import MarkdownView, { type TableTools } from "./MarkdownView";
 import ImageCell from "./ImageCell";
-import { Cell, formatStamp, isImageCell } from "@/lib/markdown";
+import { Cell, cellFileName, downloadText, formatStamp, isImageCell } from "@/lib/markdown";
 import type { ImageView, StoredImage } from "@/lib/image";
 import { continueListOnEnter, insertAt, isUrl, wrapSelectionAsLink } from "@/lib/editor";
 import {
@@ -239,6 +239,12 @@ export default function CellView({
         parsedTable.header.length === 1 ? "column" : "columns"
       }`
     : undefined;
+  const downloadCell = () => {
+    if (!cell.text.trim()) return onNotify("Nothing to download.");
+    const name = cellFileName(meta, cell.updatedAt);
+    downloadText(name, cell.text.endsWith("\n") ? cell.text : `${cell.text}\n`);
+    onNotify(`Downloaded ${name}`);
+  };
   const [sorted, setSorted] = useState<TableTools["sorted"]>(null);
   // A hand edit can reorder the rows, after which the sort marker would be a claim it cannot back.
   useEffect(() => {
@@ -333,6 +339,23 @@ export default function CellView({
           onClick={onCopy}
         >
           Copy
+        </Btn>
+        <Btn
+          className="download"
+          tip="Download this entry as a .md file"
+          onMouseDown={keepFocus}
+          onClick={downloadCell}
+        >
+          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+            <path
+              d="M8 2v8m0 0L4.5 6.5M8 10l3.5-3.5M2.5 11.5v2h11v-2"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
         </Btn>
         {editing ? (
           <Btn
