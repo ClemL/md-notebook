@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { Children, isValidElement, useCallback, useRef, useState, type ReactNode } from "react";
 import type { Element, Root } from "hast";
 import Markdown, { type Components } from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
@@ -81,7 +81,7 @@ export default function MarkdownView({
         );
       }
       return (
-        <li className={`${className ?? ""} task`.trim()} {...props}>
+        <li className={`${className ?? ""} task${checked ? " done" : ""}`.trim()} {...props}>
           <input
             type="checkbox"
             checked={checked}
@@ -89,7 +89,7 @@ export default function MarkdownView({
             onChange={() => onToggleTask?.(line)}
             aria-label="Toggle task"
           />
-          {children}
+          {taskBody(children)}
         </li>
       );
     },
@@ -125,6 +125,30 @@ function rehypeColumnIndex() {
     }
   };
   return (tree: Root) => walk(tree);
+}
+
+/**
+ * A task item's own text, wrapped so a checked item can be struck through without the strike
+ * running into its nested sub-list, whose items carry their own state.
+ */
+function taskBody(children: ReactNode): ReactNode[] {
+  const out: ReactNode[] = [];
+  let run: ReactNode[] = [];
+  const flush = () => {
+    const blank = run.every((c) => typeof c === "string" && !c.trim());
+    if (!blank) out.push(<div className="task-text" key={`t${out.length}`}>{run}</div>);
+    run = [];
+  };
+  Children.toArray(children).forEach((child) => {
+    if (isValidElement(child) && (child.type === "ul" || child.type === "ol")) {
+      flush();
+      out.push(child);
+    } else {
+      run.push(child);
+    }
+  });
+  flush();
+  return out;
 }
 
 /**

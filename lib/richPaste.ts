@@ -259,8 +259,8 @@ function basename(path: string): string {
  *   C  /{org}/{project}/_git/{repo}?version=GB{branch}&path=/{file}  -> "{branch} / {file}"
  *   B  /{org}/{project}/_git/{repo}?path=/{file}      -> "{file}"
  *   A  /{org}/{project}/_wiki/wikis/{wiki}/{id}/{page} -> "{page}", hyphens read as spaces
- *   E  /{org}/{project}/_workitems/edit/{id}          -> "Devops {id}"
- *   E  /{org}/{project}/_workitems/edit/{id}#{c}      -> "Devops {id} / Comment {c}"
+ *   E  /{org}/{project}/_workitems/edit/{id}          -> "Story {id}"
+ *   E  /{org}/{project}/_workitems/edit/{id}#{c}      -> "Story {id} / Comment {c}"
  *
  * `version` values other than a `GB` (git branch) prefix — `GT` tags, `GC` commits — are out of
  * scope and left unrewritten rather than guessed at.
@@ -307,7 +307,7 @@ export function azureDevOpsUrlLabel(raw: string): string | null {
   // fragment pointing at one comment. Query strings such as "?view=edit" are ignored.
   if (parts[2] === "_workitems" && parts[3] === "edit" && parts.length === 5 && /^\d+$/.test(parts[4])) {
     const comment = url.hash.match(/^#(\d+)$/)?.[1];
-    return comment ? `Devops ${parts[4]} / Comment ${comment}` : `Devops ${parts[4]}`;
+    return comment ? `Story ${parts[4]} / Comment ${comment}` : `Story ${parts[4]}`;
   }
 
   return null;
@@ -342,12 +342,56 @@ export function azureDevOpsLinkFromClipboard(html: string, plain: string): strin
   return rewriteAzureDevOpsUrl(anchors[0].getAttribute("href") ?? "");
 }
 
+/** A link to an Azure DevOps work item: "[1898 Onboard …](https://dev.azure.com/…/_workitems/edit/1898)". */
+const WORK_ITEM_LINK =
+  /^\[[^\]]+\]\(https:\/\/(?:dev\.azure\.com|[\w-]+\.visualstudio\.com)\/[^)\s]*\/_workitems\/edit\/\d+[^)\s]*\)/i;
+/** A board state: "Blocked", "Resolved", "In Progress" — one to three words, letters only. */
+const WORK_ITEM_STATE = /^[A-Za-z]+(?: [A-Za-z]+){0,2}$/;
+
+/**
+ * Azure DevOps copies a list of work items as each link followed by its state, run together:
+ * "[1898 Onboard …](url)Resolved". The state is what a status list is read by, so lead with it:
+ * "`resolved` [1898 Onboard …](url)". The state may also arrive on the line after its link.
+ * Applies only when every line is a work item or its state; anything else is returned unchanged.
+ */
+export function statusFirstWorkItems(md: string): string {
+  const lines = md.replace(/\r\n/g, "\n").split("\n");
+  const out: string[] = [];
+  let rewrote = false;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) {
+      out.push("");
+      continue;
+    }
+    const link = line.match(WORK_ITEM_LINK);
+    if (!link) return md;
+    let state = line.slice(link[0].length).trim();
+    // A state on its own line belongs to the link above it.
+    if (!state) {
+      const next = lines[i + 1]?.trim() ?? "";
+      if (next && !WORK_ITEM_LINK.test(next) && WORK_ITEM_STATE.test(next)) {
+        state = next;
+        i++;
+      }
+    }
+    if (state && !WORK_ITEM_STATE.test(state)) return md;
+    out.push(state ? `\`${state.toLowerCase()}\` ${link[0]}` : link[0]);
+    if (state) rewrote = true;
+  }
+  return rewrote ? out.join("\n").trim() : md;
+}
+
 /** Converts an HTML clipboard flavor to markdown; returns null when conversion is unavailable. */
 export async function htmlToMarkdown(html: string): Promise<string | null> {
   const convert = await getConverter();
   if (!convert) return null;
   try {
-    return rewriteAzureDevOpsPath(flattenInlineRun(tidyMarkdown(convert(html))));
+    const md = tidyMarkdown(convert(html));
+    // Checked first: a short work-item list would otherwise be flattened as a breadcrumb.
+    const items = statusFirstWorkItems(md);
+    if (items !== md) return items;
+    return rewriteAzureDevOpsPath(flattenInlineRun(md));
   } catch {
     return null;
   }
