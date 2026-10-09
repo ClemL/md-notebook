@@ -253,6 +253,31 @@ export async function writeClipboard(text: string): Promise<void> {
   if (!ok) throw new Error("Copy failed.");
 }
 
+/** Appends a section to accumulated clipboard text, with a "---" rule between sections. */
+export function appendSection(existing: string, text: string): string {
+  const head = existing.trimEnd();
+  const tail = text.trim();
+  return head ? `${head}\n\n---\n\n${tail}\n` : `${tail}\n`;
+}
+
+/**
+ * Appends text to whatever the clipboard holds, so several entries can be gathered and pasted
+ * as one report. When the browser will not let the page read the clipboard, the last text this
+ * function wrote stands in for it.
+ */
+let lastAppended = "";
+export async function appendToClipboard(text: string): Promise<void> {
+  let existing = lastAppended;
+  try {
+    existing = (await navigator.clipboard.readText()) ?? "";
+  } catch {
+    // Read denied or unsupported: keep building on what was appended here.
+  }
+  const next = appendSection(existing, text);
+  await writeClipboard(next);
+  lastAppended = next;
+}
+
 export function downloadText(filename: string, text: string, mime = "text/markdown"): void {
   const blob = new Blob([text], { type: `${mime};charset=utf-8` });
   const url = URL.createObjectURL(blob);
