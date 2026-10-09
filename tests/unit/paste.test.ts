@@ -187,13 +187,13 @@ describe("Azure DevOps URL pasted as a bare URL", () => {
 
   it("labels a work item with its number, and a comment link with both", () => {
     const story = "https://dev.azure.com/inscriptrx/Org/_workitems/edit/1973/?view=edit";
-    expect(rewriteAzureDevOpsUrl(story)).toBe(`[Devops 1973](${story})`);
-    expect(azureDevOpsUrlLabel("https://dev.azure.com/inscriptrx/Org/_workitems/edit/1973")).toBe("Devops 1973");
+    expect(rewriteAzureDevOpsUrl(story)).toBe(`[Story 1973](${story})`);
+    expect(azureDevOpsUrlLabel("https://dev.azure.com/inscriptrx/Org/_workitems/edit/1973")).toBe("Story 1973");
     const comment = "https://dev.azure.com/inscriptrx/Org/_workitems/edit/1973#16306064";
-    expect(rewriteAzureDevOpsUrl(comment)).toBe(`[Devops 1973 / Comment 16306064](${comment})`);
+    expect(rewriteAzureDevOpsUrl(comment)).toBe(`[Story 1973 / Comment 16306064](${comment})`);
     // A fragment that is not a comment id is ignored rather than guessed at.
     expect(azureDevOpsUrlLabel("https://dev.azure.com/inscriptrx/Org/_workitems/edit/1973#history")).toBe(
-      "Devops 1973",
+      "Story 1973",
     );
   });
 

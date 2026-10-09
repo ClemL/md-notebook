@@ -259,8 +259,8 @@ function basename(path: string): string {
  *   C  /{org}/{project}/_git/{repo}?version=GB{branch}&path=/{file}  -> "{branch} / {file}"
  *   B  /{org}/{project}/_git/{repo}?path=/{file}      -> "{file}"
  *   A  /{org}/{project}/_wiki/wikis/{wiki}/{id}/{page} -> "{page}", hyphens read as spaces
- *   E  /{org}/{project}/_workitems/edit/{id}          -> "Devops {id}"
- *   E  /{org}/{project}/_workitems/edit/{id}#{c}      -> "Devops {id} / Comment {c}"
+ *   E  /{org}/{project}/_workitems/edit/{id}          -> "Story {id}"
+ *   E  /{org}/{project}/_workitems/edit/{id}#{c}      -> "Story {id} / Comment {c}"
  *
  * `version` values other than a `GB` (git branch) prefix — `GT` tags, `GC` commits — are out of
  * scope and left unrewritten rather than guessed at.
@@ -307,7 +307,7 @@ export function azureDevOpsUrlLabel(raw: string): string | null {
   // fragment pointing at one comment. Query strings such as "?view=edit" are ignored.
   if (parts[2] === "_workitems" && parts[3] === "edit" && parts.length === 5 && /^\d+$/.test(parts[4])) {
     const comment = url.hash.match(/^#(\d+)$/)?.[1];
-    return comment ? `Devops ${parts[4]} / Comment ${comment}` : `Devops ${parts[4]}`;
+    return comment ? `Story ${parts[4]} / Comment ${comment}` : `Story ${parts[4]}`;
   }
 
   return null;
