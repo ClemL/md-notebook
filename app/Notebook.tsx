@@ -36,7 +36,7 @@ import {
   type StoredImage,
 } from "@/lib/image";
 import { maybeTable } from "@/lib/table";
-import { readClipboardSmart } from "@/lib/richPaste";
+import { readClipboardSmart, statusFirstWorkItems } from "@/lib/richPaste";
 import { TEMPLATES } from "@/lib/templates";
 
 const SEP_KEY = "md-notebook:separators";
@@ -346,7 +346,12 @@ function NotebookInner() {
       text = payload.text;
       rich = payload.rich;
       if (!rich) {
-        const table = maybeTable(text);
+        const items = statusFirstWorkItems(text);
+        if (items !== text) {
+          text = items;
+          rich = true;
+        }
+        const table = rich ? null : maybeTable(text);
         if (table) {
           text = table;
           rich = true;

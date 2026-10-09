@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   azureDevOpsUrlLabel,
+  htmlToMarkdown,
+  statusFirstWorkItems,
   flattenInlineRun,
   isInlineRun,
   rewriteAzureDevOpsPath,
@@ -256,5 +258,49 @@ describe("Azure DevOps URL pasted as a bare URL", () => {
     expect(rewriteAzureDevOpsUrl(`  ${PULL_REQUEST}\n`)).toBe(
       `[Model.Landing.Optum PR !2865](${PULL_REQUEST})`,
     );
+  });
+});
+
+describe("Azure DevOps work-item list", () => {
+  const A = "[1897 Removed most recent RxSense file from blob storage](https://dev.azure.com/inscriptrx/Org/_workitems/edit/1897)";
+  const B = "[1898 Onboard @Alyssa Hewson, start date 9/28](https://dev.azure.com/inscriptrx/Org/_workitems/edit/1898)";
+
+  it("puts each item's state in front, lowercased, as inline code", () => {
+    expect(statusFirstWorkItems(`\n\n${A}Blocked\n\n${B}Resolved\n\n`)).toBe(
+      `\`blocked\` ${A}\n\n\`resolved\` ${B}`,
+    );
+  });
+
+  it("takes a state from the line after its link, and multi-word states", () => {
+    expect(statusFirstWorkItems(`${A}\nIn Progress\n${B} Resolved`)).toBe(
+      `\`in progress\` ${A}\n\`resolved\` ${B}`,
+    );
+  });
+
+  it("leaves an item without a state as is when others have one", () => {
+    expect(statusFirstWorkItems(`${A}\n${B}Closed`)).toBe(`${A}\n\`closed\` ${B}`);
+  });
+
+  it("leaves anything that is not purely a work-item list alone", () => {
+    for (const md of [
+      `${A}\n${B}`,
+      `Notes from standup\n${A}Blocked`,
+      `${A}Blocked, waiting on Optum.`,
+      "[1897 Something](https://example.com/_workitems/edit/1897)Blocked",
+    ]) {
+      expect(statusFirstWorkItems(md)).toBe(md);
+    }
+  });
+
+  it("is idempotent", () => {
+    const once = statusFirstWorkItems(`${A}Blocked`);
+    expect(statusFirstWorkItems(once)).toBe(once);
+  });
+
+  it("applies to rich paste before the breadcrumb flattening", async () => {
+    const html =
+      '<div><a href="https://dev.azure.com/inscriptrx/Org/_workitems/edit/1897">1897 Removed most recent RxSense file from blob storage</a>Blocked</div>' +
+      '<div><a href="https://dev.azure.com/inscriptrx/Org/_workitems/edit/1898">1898 Onboard @Alyssa Hewson, start date 9/28</a>Resolved</div>';
+    expect(await htmlToMarkdown(html)).toBe(`\`blocked\` ${A}\n\n\`resolved\` ${B}`);
   });
 });
