@@ -303,4 +303,19 @@ describe("Azure DevOps work-item list", () => {
       '<div><a href="https://dev.azure.com/inscriptrx/Org/_workitems/edit/1898">1898 Onboard @Alyssa Hewson, start date 9/28</a>Resolved</div>';
     expect(await htmlToMarkdown(html)).toBe(`\`blocked\` ${A}\n\n\`resolved\` ${B}`);
   });
+
+  it("handles a series whose titles contain brackets", async () => {
+    const u = (n: number) => `https://dev.azure.com/inscriptrx/Org/_workitems/edit/${n}`;
+    const html =
+      `<div><a href="${u(2051)}">2051 BIDMC DB Access : create the research schema and add Parth's view to it</a>New</div>` +
+      `<div><a href="${u(2028)}">2028 Onboard Chelsea Dolloff 10/19 340b PRoduct Manager [ contacting her today ]</a>Active</div>` +
+      `<div><a href="${u(1887)}">1887 BIDMC IRB Request, Expose report.rxsenseclaim to them</a>Active</div>`;
+    expect(await htmlToMarkdown(html)).toBe(
+      [
+        `\`new\` [2051 BIDMC DB Access : create the research schema and add Parth's view to it](${u(2051)})`,
+        `\`active\` [2028 Onboard Chelsea Dolloff 10/19 340b PRoduct Manager \\[ contacting her today \\]](${u(2028)})`,
+        `\`active\` [1887 BIDMC IRB Request, Expose report.rxsenseclaim to them](${u(1887)})`,
+      ].join("\n\n"),
+    );
+  });
 });

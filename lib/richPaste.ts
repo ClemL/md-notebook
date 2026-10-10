@@ -342,9 +342,12 @@ export function azureDevOpsLinkFromClipboard(html: string, plain: string): strin
   return rewriteAzureDevOpsUrl(anchors[0].getAttribute("href") ?? "");
 }
 
-/** A link to an Azure DevOps work item: "[1898 Onboard …](https://dev.azure.com/…/_workitems/edit/1898)". */
+/**
+ * A link to an Azure DevOps work item: "[1898 Onboard …](https://dev.azure.com/…/_workitems/edit/1898)".
+ * The label may carry escaped brackets, as Turndown writes a title such as "Onboard [ pending ]".
+ */
 const WORK_ITEM_LINK =
-  /^\[[^\]]+\]\(https:\/\/(?:dev\.azure\.com|[\w-]+\.visualstudio\.com)\/[^)\s]*\/_workitems\/edit\/\d+[^)\s]*\)/i;
+  /^\[(?:\\.|[^\]\\])+\]\(https:\/\/(?:dev\.azure\.com|[\w-]+\.visualstudio\.com)\/[^)\s]*\/_workitems\/edit\/\d+[^)\s]*\)/i;
 /** A board state: "Blocked", "Resolved", "In Progress" — one to three words, letters only. */
 const WORK_ITEM_STATE = /^[A-Za-z]+(?: [A-Za-z]+){0,2}$/;
 

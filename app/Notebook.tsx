@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Btn from "./Btn";
-import CellView from "./CellView";
+import CellView, { type FlashAction } from "./CellView";
+import { VIEWS as IMAGE_VIEWS } from "./ImageCell";
 import Dropdown from "./Dropdown";
 import { FlashProvider, useFlash } from "./flash";
 import {
@@ -46,6 +47,8 @@ const COMPACT_KEY = "md-notebook:compact";
 const HINT_KEY = "md-notebook:hint";
 const WIDE_KEY = "md-notebook:wide";
 const COLLAPSED_KEY = "md-notebook:collapsed";
+const IMAGE_VIEW_KEY = "md-notebook:imageview";
+const IMAGE_VIEW_VALUES: ImageView[] = ["thumb", "width", "original"];
 const HISTORY_LIMIT = 30;
 
 type ToastAction = { label: string; run: () => void };
@@ -78,6 +81,8 @@ function NotebookInner() {
   const [insertTop, setInsertTop] = useState(false);
   const [compact, setCompact] = useState(false);
   const [wide, setWide] = useState(false);
+  /** The size every image was last set to from the menu; new pastes start at it too. */
+  const [imageView, setImageViewDefault] = useState<ImageView>("thumb");
   const [showHint, setShowHint] = useState(true);
   const [collapsedIds, setCollapsedIds] = useState<Record<string, boolean>>({});
   const [storageOk, setStorageOk] = useState(true);
@@ -172,6 +177,8 @@ function NotebookInner() {
     setCompact(localStorage.getItem(COMPACT_KEY) === "1");
     setWide(localStorage.getItem(WIDE_KEY) === "1");
     setShowHint(localStorage.getItem(HINT_KEY) !== "0");
+    const savedView = localStorage.getItem(IMAGE_VIEW_KEY) as ImageView | null;
+    if (savedView && IMAGE_VIEW_VALUES.includes(savedView)) setImageViewDefault(savedView);
     try {
       const saved: unknown = JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? "[]");
       if (Array.isArray(saved)) {
@@ -215,6 +222,10 @@ function NotebookInner() {
   useEffect(() => {
     if (loaded) localStorage.setItem(HINT_KEY, showHint ? "1" : "0");
   }, [showHint, loaded]);
+
+  useEffect(() => {
+    if (loaded) localStorage.setItem(IMAGE_VIEW_KEY, imageView);
+  }, [imageView, loaded]);
 
   // Only ids that still exist are remembered, so the list cannot grow without bound.
   useEffect(() => {
@@ -313,7 +324,8 @@ function NotebookInner() {
   const addImage = useCallback(
     async (file: File | Blob, name?: string) => {
       try {
-        const image = await storeImage(file, name);
+        const stored = await storeImage(file, name);
+        const image = imageView === "thumb" ? stored : { ...stored, view: imageView };
         const cell = makeImageCell(image);
         mutate((prev) => place(prev, [cell]));
         setSelectedId(cell.id);
@@ -329,7 +341,7 @@ function NotebookInner() {
         say(err instanceof Error ? err.message : "That image could not be stored.");
       }
     },
-    [mutate, place, say],
+    [mutate, place, say, imageView],
   );
 
   const newFromClipboard = useCallback(async () => {
@@ -411,6 +423,14 @@ function NotebookInner() {
     );
     cellsRef.current = next;
     setCells(next);
+  }, []);
+
+  // The menu's "All images" choice: applied to every image now, and to new pastes from here on.
+  const setAllImageViews = useCallback((view: ImageView) => {
+    const next = cellsRef.current.map((c) => (c.image ? { ...c, image: { ...c.image, view } } : c));
+    cellsRef.current = next;
+    setCells(next);
+    setImageViewDefault(view);
   }, []);
 
   const remove = useCallback(
@@ -926,6 +946,22 @@ function NotebookInner() {
           <button onClick={checkboxAll}>
             Checkbox All <kbd>t</kbd>
           </button>
+          <div className="menu-row" role="group" aria-label="All images">
+            <span>All images</span>
+            <span className="view-group">
+              {IMAGE_VIEWS.map((v) => (
+                <button
+                  key={v.view}
+                  title={`${v.tip}, for every image and new pastes`}
+                  aria-pressed={imageView === v.view}
+                  className={imageView === v.view ? "on" : undefined}
+                  onClick={() => setAllImageViews(v.view)}
+                >
+                  {v.label}
+                </button>
+              ))}
+            </span>
+          </div>
           <hr />
           <button onClick={() => fileRef.current?.click()}>Import .md / .json…</button>
           <button onClick={backup}>Backup as .json</button>
@@ -1040,7 +1076,14 @@ function NotebookInner() {
             onDelete={() => remove(cell.id)}
             onMove={(d) => move(cell.id, d)}
             richPaste={richPaste}
-            flashed={flashed === cell.id}
+            flashed={
+              flashed === cell.id
+                ? "copy"
+                : flashed?.startsWith(`${cell.id}:`)
+                  ? (flashed.slice(cell.id.length + 1) as FlashAction)
+                  : null
+            }
+            onFlash={(action) => flash(action === "copy" ? cell.id : `${cell.id}:${action}`)}
             onCopy={async () => {
               try {
                 if (isImageCell(cell)) {

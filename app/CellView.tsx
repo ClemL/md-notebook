@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Btn from "./Btn";
+import Btn, { DownloadIcon } from "./Btn";
 import MarkdownView, { type TableTools } from "./MarkdownView";
 import ImageCell from "./ImageCell";
 import { Cell, appendToClipboard, cellFileName, downloadText, formatStamp, isImageCell } from "@/lib/markdown";
@@ -48,9 +48,13 @@ type Props = {
   onToggleCollapse: () => void;
   onSplit: (caret: number) => void;
   onMerge: () => void;
-  /** True while this entry is the most recent copy target. */
-  flashed: boolean;
+  /** Which of this entry's buttons ran the most recent copy-style action, if any. */
+  flashed: FlashAction | null;
+  onFlash: (action: FlashAction) => void;
 };
+
+/** Entry buttons that light up green once used: copy, append to clipboard, and checkbox. */
+export type FlashAction = "copy" | "append" | "check";
 
 export default function CellView({
   cell,
@@ -81,6 +85,7 @@ export default function CellView({
   onSplit,
   onMerge,
   flashed,
+  onFlash,
 }: Props) {
   const ref = useRef<HTMLTextAreaElement | null>(null);
   const bodyRef = useRef<HTMLDivElement | null>(null);
@@ -243,6 +248,7 @@ export default function CellView({
     if (!cell.text.trim()) return onNotify("Nothing to append.");
     try {
       await appendToClipboard(cell.text);
+      onFlash("append");
       onNotify("Appended to the clipboard.");
     } catch {
       onNotify("Append failed — the browser blocked clipboard access.");
@@ -288,7 +294,7 @@ export default function CellView({
         last={last}
         canMerge={canMerge}
         selected={selected}
-        flashed={flashed}
+        flashed={flashed === "copy"}
         collapsed={collapsed}
         onToggleCollapse={onToggleCollapse}
         onSelect={onSelect}
@@ -335,15 +341,19 @@ export default function CellView({
         <Btn
           tip="Prefix every line with * [ ]"
           hotkey="t"
+          flash={flashed === "check"}
           onMouseDown={keepFocus}
-          onClick={onCheckbox}
+          onClick={() => {
+            onCheckbox();
+            onFlash("check");
+          }}
         >
           ☑️
         </Btn>
         <Btn
           tip="Copy this entry's markdown"
           hotkey="c"
-          flash={flashed}
+          flash={flashed === "copy"}
           onMouseDown={keepFocus}
           onClick={onCopy}
         >
@@ -351,6 +361,7 @@ export default function CellView({
         </Btn>
         <Btn
           tip="Append this entry to the clipboard, after a --- rule"
+          flash={flashed === "append"}
           onMouseDown={keepFocus}
           onClick={appendCell}
         >
@@ -362,16 +373,7 @@ export default function CellView({
           onMouseDown={keepFocus}
           onClick={downloadCell}
         >
-          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-            <path
-              d="M8 2v8m0 0L4.5 6.5M8 10l3.5-3.5M2.5 11.5v2h11v-2"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.6"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
+          <DownloadIcon />
         </Btn>
         {editing ? (
           <Btn
