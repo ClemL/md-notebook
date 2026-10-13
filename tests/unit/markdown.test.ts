@@ -11,6 +11,8 @@ import {
   splitMarkdown,
   timestamp,
   toCheckboxes,
+  cycleLineFormat,
+  currentLineFormat,
   toggleTaskAtLine,
 } from "@/lib/markdown";
 
@@ -161,5 +163,27 @@ describe("appendSection", () => {
 
   it("separates sections with a --- rule", () => {
     expect(appendSection("alpha\n", "beta")).toBe("alpha\n\n---\n\nbeta\n");
+  });
+});
+
+describe("cycleLineFormat", () => {
+  it("steps task -> numbered -> bullet -> code -> plain -> task", () => {
+    const steps = ["a\nb"];
+    for (let i = 0; i < 5; i++) steps.push(cycleLineFormat(steps[steps.length - 1]));
+    expect(steps).toEqual(["a\nb", "* [ ] a\n* [ ] b", "1. a\n2. b", "- a\n- b", "`a`\n`b`", "a\nb"]);
+  });
+
+  it("numbers each indent level from 1 and keeps blank lines", () => {
+    expect(cycleLineFormat("* [ ] a\n  * [ ] a1\n  * [ ] a2\n\n* [x] b")).toBe("1. a\n  1. a1\n  2. a2\n\n2. b");
+  });
+
+  it("fences inline code that already holds backticks", () => {
+    expect(cycleLineFormat("- run `npm ci`")).toBe("`` run `npm ci` ``");
+    expect(cycleLineFormat("`` run `npm ci` ``")).toBe("run `npm ci`");
+  });
+
+  it("turns a mixed entry into tasks, keeping ticked items", () => {
+    expect(cycleLineFormat("* [x] done\n1. next")).toBe("* [x] done\n* [ ] next");
+    expect(currentLineFormat("* [x] done\n1. next")).toBe("plain");
   });
 });

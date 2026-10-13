@@ -50,16 +50,24 @@ test("paste new pulls the clipboard into a focused entry", async ({ page }) => {
   await expect(ta).toHaveValue("pasted from the clipboard");
 });
 
-test("checkbox button is idempotent and does not close the editor", async ({ page }) => {
+test("checkbox button cycles line formats and does not close the editor", async ({ page }) => {
   await page.getByRole("button", { name: /New empty entry/ }).click();
   const ta = page.locator("textarea.editor");
   await ta.fill("alpha\nbeta\n\ngamma");
+  const cycle = page.locator(".cell.editing").getByRole("button", { name: /Make every line a task/ });
 
-  await page.locator(".cell.editing").getByRole("button", { name: /Prefix every line/ }).click();
+  await cycle.click();
   await expect(ta).toHaveValue("* [ ] alpha\n* [ ] beta\n\n* [ ] gamma");
   await expect(page.locator("textarea.editor")).toHaveCount(1);
-
-  await page.locator(".cell.editing").getByRole("button", { name: /Prefix every line/ }).click();
+  await cycle.click();
+  await expect(ta).toHaveValue("1. alpha\n2. beta\n\n3. gamma");
+  await cycle.click();
+  await expect(ta).toHaveValue("- alpha\n- beta\n\n- gamma");
+  await cycle.click();
+  await expect(ta).toHaveValue("`alpha`\n`beta`\n\n`gamma`");
+  await cycle.click();
+  await expect(ta).toHaveValue("alpha\nbeta\n\ngamma");
+  await cycle.click();
   await expect(ta).toHaveValue("* [ ] alpha\n* [ ] beta\n\n* [ ] gamma");
 
   await ta.press("Escape");
@@ -121,21 +129,48 @@ test("+📋 appends entries to the clipboard with a --- rule between them", asyn
 
 test("append and checkbox buttons turn green once used, like copy", async ({ page }) => {
   await addEntry(page, "first finding");
-  const cell = page.locator("section.cell").first();
-  const append = cell.getByRole("button", { name: /Append this entry to the clipboard/ });
-  const check = cell.getByRole("button", { name: /Prefix every line/ });
-  const copy = cell.getByRole("button", { name: /Copy this entry/ });
+  await addEntry(page, "second finding");
+  const cells = page.locator("section.cell");
+  const append = (i: number) => cells.nth(i).getByRole("button", { name: /Append this entry to the clipboard/ });
+  const check = cells.nth(0).getByRole("button", { name: /Make every line a task/ });
+  const copy = cells.nth(1).getByRole("button", { name: /Copy this entry/ });
 
-  await append.click();
-  await expect(append).toHaveAttribute("data-flash", "on");
+  // Every entry appended stays marked: together they are what the clipboard holds.
+  await append(0).click();
+  await expect(append(0)).toHaveAttribute("data-flash", "on");
+  await append(1).click();
+  await expect(append(1)).toHaveAttribute("data-flash", "on");
+  await expect(append(0)).toHaveAttribute("data-flash", "on");
 
+  // The checkbox does not touch the clipboard, so the appended marks survive it.
   await check.click();
   await expect(check).toHaveAttribute("data-flash", "on");
-  await expect(append).not.toHaveAttribute("data-flash", "on");
+  await expect(append(0)).toHaveAttribute("data-flash", "on");
 
+  // A copy replaces the clipboard, which ends the run of appends.
   await copy.click();
   await expect(copy).toHaveAttribute("data-flash", "on");
   await expect(check).not.toHaveAttribute("data-flash", "on");
+  await expect(append(0)).not.toHaveAttribute("data-flash", "on");
+  await expect(append(1)).not.toHaveAttribute("data-flash", "on");
+});
+
+test("entry toolbars lead with Edit, Download, Copy", async ({ page }) => {
+  await addEntry(page, "text entry");
+  await addEntry(page, "| a | b |\n| - | - |\n| 1 | 2 |");
+  await pasteImage(page);
+  const lead = (i: number) =>
+    page
+      .locator("section.cell")
+      .nth(i)
+      .locator(".cell-head button:not(.collapse-toggle)")
+      .evaluateAll((els) => els.slice(0, 3).map((el) => el.getAttribute("aria-label") ?? ""));
+  for (const i of [0, 1, 2]) {
+    const [edit, download, copy] = await lead(i);
+    expect(edit).toMatch(/^(Edit|Mark the image up)/);
+    expect(download).toMatch(/^Download this/);
+    expect(copy).toMatch(/^Copy (this|the image)/);
+  }
 });
 
 test("code blocks expose a copy button", async ({ page }) => {
@@ -564,7 +599,7 @@ test("a pasted image becomes an image entry without the text actions", async ({ 
   const labels = await cell.getByRole("button").evaluateAll((els) =>
     els.map((el) => el.getAttribute("aria-label") ?? el.textContent?.trim() ?? ""),
   );
-  expect(labels.filter((l) => /Edit this|Prefix every line|Split|Raw|Send/.test(l))).toEqual([]);
+  expect(labels.filter((l) => /Edit this|Make every line a task|Split|Raw|Send/.test(l))).toEqual([]);
   // A lone image has nothing below it to merge with.
   expect(labels.filter((l) => /Merge/.test(l))).toEqual([]);
   expect(labels.some((l) => /Move entry up/.test(l))).toBe(true);
@@ -1428,7 +1463,7 @@ test("header labels: + Paste and a checkbox emoji", async ({ page }) => {
   await expect(page.locator("header.bar .title")).toHaveText("mdnb");
   await expect(page.getByRole("button", { name: /New entry from clipboard/ })).toHaveText("+ Paste");
   await addEntry(page, "a line");
-  await expect(page.getByRole("button", { name: /Prefix every line/ })).toHaveText("☑️");
+  await expect(page.getByRole("button", { name: /Make every line a task/ })).toHaveText("☑️");
 });
 
 test("the search box shrinks before the header wraps", async ({ page }) => {

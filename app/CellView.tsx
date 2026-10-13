@@ -50,11 +50,13 @@ type Props = {
   onMerge: () => void;
   /** Which of this entry's buttons ran the most recent copy-style action, if any. */
   flashed: FlashAction | null;
-  onFlash: (action: FlashAction) => void;
+  /** True once this entry has been appended to the clipboard, until a copy replaces it. */
+  appended: boolean;
+  onFlash: (action: FlashAction | "append") => void;
 };
 
 /** Entry buttons that light up green once used: copy, append to clipboard, and checkbox. */
-export type FlashAction = "copy" | "append" | "check";
+export type FlashAction = "copy" | "check";
 
 export default function CellView({
   cell,
@@ -85,6 +87,7 @@ export default function CellView({
   onSplit,
   onMerge,
   flashed,
+  appended,
   onFlash,
 }: Props) {
   const ref = useRef<HTMLTextAreaElement | null>(null);
@@ -339,16 +342,12 @@ export default function CellView({
           </Btn>
         )}
         <Btn
-          tip="Prefix every line with * [ ]"
-          hotkey="t"
-          flash={flashed === "check"}
+          className="download"
+          tip="Download this entry as a .md file"
           onMouseDown={keepFocus}
-          onClick={() => {
-            onCheckbox();
-            onFlash("check");
-          }}
+          onClick={downloadCell}
         >
-          ☑️
+          <DownloadIcon />
         </Btn>
         <Btn
           tip="Copy this entry's markdown"
@@ -361,19 +360,23 @@ export default function CellView({
         </Btn>
         <Btn
           tip="Append this entry to the clipboard, after a --- rule"
-          flash={flashed === "append"}
+          flash={appended}
           onMouseDown={keepFocus}
           onClick={appendCell}
         >
           +📋
         </Btn>
         <Btn
-          className="download"
-          tip="Download this entry as a .md file"
+          tip="Make every line a task; click again for numbered, bullets, `code`, then plain"
+          hotkey="t"
+          flash={flashed === "check"}
           onMouseDown={keepFocus}
-          onClick={downloadCell}
+          onClick={() => {
+            onCheckbox();
+            onFlash("check");
+          }}
         >
-          <DownloadIcon />
+          ☑️
         </Btn>
         {editing ? (
           <Btn
