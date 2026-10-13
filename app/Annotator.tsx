@@ -143,7 +143,8 @@ export function AnnotationLayer({ image }: { image: StoredImage }) {
 
 /**
  * The built-in annotator: arrows, lines, boxes, ellipses, freehand and text over the image,
- * stored as shapes rather than pixels. Tool keys match Excalidraw's.
+ * stored as shapes rather than pixels. Tool keys match Excalidraw's, and double-clicking
+ * anywhere drops a text label whatever the tool, the way it does there.
  */
 export default function Annotator({
   image,
@@ -297,6 +298,14 @@ export default function Annotator({
     });
   };
 
+  // The two clicks before it are too small to keep as shapes, so only the label is left.
+  const onDoubleClick = (e: React.MouseEvent<SVGSVGElement>) => {
+    e.preventDefault();
+    drawing.current = false;
+    setDraft(null);
+    startText(e);
+  };
+
   const onPointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
     if (!drawing.current) return;
     const { x, y } = toImage(e);
@@ -399,6 +408,7 @@ export default function Annotator({
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
             onPointerCancel={onPointerUp}
+            onDoubleClick={onDoubleClick}
           >
             {shapes.map((s) => (
               <ShapeMark key={s.id} shape={s} imageWidth={image.width} />

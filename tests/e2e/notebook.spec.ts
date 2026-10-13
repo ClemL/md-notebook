@@ -1152,6 +1152,22 @@ test("the annotator uses Excalidraw's tool keys", async ({ page }) => {
   expect(tools.map((t) => t.trim().split(" ")[0])).toEqual(["Box", "Arrow", "Line", "Text"]);
 });
 
+test("double-clicking the image drops a text label whatever the tool", async ({ page }) => {
+  await pasteImage(page, [400, 300]);
+  await page.locator("section.cell.image-cell").getByRole("button", { name: /Mark the image up/ }).click();
+  const layer = page.locator(".annotation-layer.editing");
+  const box = (await layer.boundingBox())!;
+
+  // Box is the default tool; a double-click still writes text rather than drawing.
+  await page.mouse.dblclick(box.x + 80, box.y + 60);
+  const input = page.locator("#annotation-text");
+  await expect(input).toBeFocused();
+  await input.fill("check this row");
+  await input.press("Enter");
+  await expect(layer.locator("text")).toHaveText("check this row");
+  await expect(layer.locator("rect")).toHaveCount(0);
+});
+
 test("the Text tool drops a label, and Ctrl+Z / Ctrl+Shift+Z step through it", async ({ page }) => {
   await pasteImage(page);
   await openFullEditor(page);
