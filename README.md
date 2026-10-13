@@ -73,7 +73,9 @@ the codebase, unused, so the feature can be wired back in.
   `localStorage`. A markdown export writes a dated caption rather than a megabyte of base64 — use
   the `.json` backup to preserve the pixels.
 - **Copy and export feedback.** The button whose copy or export ran most recently turns green, and
-  reverts when another one is used, so it doubles as a record of what you last copied.
+  reverts when another one is used, so it doubles as a record of what you last copied. Every
+  **+📋** used since the last copy stays green, since together they are what the clipboard holds.
+- **Entry toolbars** lead with **Edit**, **Download** and **Copy** on text, table and image entries.
 - **Enter continues lists.** `- alpha` + Enter gives `- `, `* [x] done` gives `* [ ] `, `3. third`
   gives `4. `, and Enter on an empty marker clears it.
 - **Paste a URL over a selection** to wrap it: select `runbook`, paste, get `[runbook](url)`.
@@ -82,9 +84,10 @@ the codebase, unused, so the feature can be wired back in.
 - **Raw view.** `r` or the **Raw** button shows an entry's markdown source without opening the
   editor, so you can read or copy it without risking an edit.
 - **Live task checkboxes.** Ticking a rendered `* [ ]` writes `[x]` back into the markdown source.
-- **☑️ (Checkbox).** Prefixes every non-empty line of an entry with `* [ ] `. Idempotent — lines that are
-  already tasks are left alone, and existing bullets (`- `, `1. `) are converted rather than doubled.
-  **Checkbox All** applies it to every entry.
+- **☑️ (Checkbox).** Prefixes every non-empty line of an entry with `* [ ] `; lines that are already
+  tasks are left alone, and existing bullets (`- `, `1. `) are converted rather than doubled. Click
+  again (or press `t`) to step on through `1.` numbered, `-` bullets, `` `code` `` and plain text,
+  then back to tasks. **Checkbox All** only adds tasks, to every entry.
 - **Timestamps** on every entry, and long entries are clamped with *Show more* so one big paste does
   not bury the rest.
 - **Templates** live in their own dropdown: meeting summary (dated, with Decisions and Todos
@@ -174,7 +177,7 @@ Two ways, for two different needs:
   shapes included, to a full-window editor. Either way: boxes, arrows, lines and text labels in five
   colours. Tool keys are Excalidraw's own — `r`/`2` box, `a`/`5` arrow, `l`/`6` line, `t`/`8` text
   — with `Ctrl+Z` / `Ctrl+Shift+Z` to step through, `Ctrl+Enter` to save and `Esc` to cancel.
-  With the Text tool, click to drop a label; `Esc` while typing abandons the label rather than the
+  With the Text tool, click to drop a label, or double-click with any tool; `Esc` while typing abandons the label rather than the
   editor. The palette stops there on purpose: ellipse, freehand, diamond
   and the rest are what Excalidraw is for. Annotations drawn by an earlier version still render.
 

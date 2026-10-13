@@ -23,6 +23,7 @@ import {
   splitMarkdown,
   timestamp,
   toCheckboxes,
+  cycleLineFormat,
   toggleTaskAtLine,
   writeClipboard,
 } from "@/lib/markdown";
@@ -67,7 +68,7 @@ export default function Notebook() {
 }
 
 function NotebookInner() {
-  const { flashed, flash } = useFlash();
+  const { flashed, flash, appended, markAppended } = useFlash();
   const [cells, setCells] = useState<Cell[]>([]);
   // History lives in refs: a snapshot must be read when the change happens, not when a lazy
   // state updater later runs, or it captures the post-change state. `histVersion` only exists
@@ -530,7 +531,7 @@ function NotebookInner() {
     (id: string) => {
       mutate((prev) =>
         prev.map((c) =>
-          c.id === id ? { ...c, text: toCheckboxes(c.text), updatedAt: Date.now() } : c,
+          c.id === id ? { ...c, text: cycleLineFormat(c.text), updatedAt: Date.now() } : c,
         ),
       );
     },
@@ -591,7 +592,7 @@ function NotebookInner() {
     if (!text.trim()) return say("Nothing to copy.");
     try {
       await writeClipboard(text);
-      flash("copy-all");
+      flash("copy-all", { clipboard: true });
       say(`Copied ${visible.length} ${visible.length === 1 ? "entry" : "entries"}${filtering ? " (filtered)" : ""}.`);
     } catch {
       say("Copy failed — the browser blocked clipboard write.");
@@ -799,7 +800,11 @@ function NotebookInner() {
           if (selectedId) {
             e.preventDefault();
             const cell = cellsRef.current.find((c) => c.id === selectedId);
-            if (cell) void writeClipboard(cell.text).then(() => say("Entry copied."));
+            if (cell)
+              void writeClipboard(cell.text).then(() => {
+                flash(cell.id, { clipboard: true });
+                say("Entry copied.");
+              });
           }
           break;
         case "t":
@@ -1083,16 +1088,19 @@ function NotebookInner() {
                   ? (flashed.slice(cell.id.length + 1) as FlashAction)
                   : null
             }
-            onFlash={(action) => flash(action === "copy" ? cell.id : `${cell.id}:${action}`)}
+            appended={appended.has(cell.id)}
+            onFlash={(action) =>
+              action === "append" ? markAppended(cell.id) : flash(`${cell.id}:${action}`)
+            }
             onCopy={async () => {
               try {
                 if (isImageCell(cell)) {
                   await copyImage(cell.image!);
-                  flash(cell.id);
+                  flash(cell.id, { clipboard: true });
                   say("Image copied to the clipboard.");
                 } else {
                   await writeClipboard(cell.text);
-                  flash(cell.id);
+                  flash(cell.id, { clipboard: true });
                   say("Entry copied.");
                 }
               } catch (err) {

@@ -64,6 +64,94 @@ export function toCheckboxes(text: string): string {
     .join("\n");
 }
 
+/** The line formats the ☑️ button steps through, in order; "plain" wraps back to "task". */
+export const LINE_FORMATS = ["task", "numbered", "bullet", "code", "plain"] as const;
+export type LineFormat = (typeof LINE_FORMATS)[number];
+
+const TASK_LINE = /^(?:[-*+]|\d+[.)])\s+\[[ xX]\]\s+/;
+const NUMBERED_LINE = /^\d+[.)]\s+/;
+const BULLET_LINE = /^[-*+]\s+/;
+const CODE_LINE = /^(`+)\s?(.*?)\s?\1$/;
+
+function lineFormat(body: string): LineFormat {
+  if (TASK_LINE.test(body)) return "task";
+  if (NUMBERED_LINE.test(body)) return "numbered";
+  if (BULLET_LINE.test(body)) return "bullet";
+  if (CODE_LINE.test(body)) return "code";
+  return "plain";
+}
+
+/** The format every non-empty line shares, or "plain" when they differ. */
+export function currentLineFormat(text: string): LineFormat {
+  const formats = new Set(
+    text
+      .split("\n")
+      .filter((l) => l.trim())
+      .map((l) => lineFormat(l.trimStart())),
+  );
+  return formats.size === 1 ? [...formats][0] : "plain";
+}
+
+function stripLineFormat(body: string): string {
+  const code = body.match(CODE_LINE);
+  if (code) return code[2];
+  return body.replace(TASK_LINE, "").replace(NUMBERED_LINE, "").replace(BULLET_LINE, "");
+}
+
+/** Inline code that survives backticks in the text by using a longer fence. */
+function asInlineCode(body: string): string {
+  const longest = Math.max(0, ...(body.match(/`+/g) ?? []).map((run) => run.length));
+  const fence = "`".repeat(longest + 1);
+  return longest ? `${fence} ${body} ${fence}` : `${fence}${body}${fence}`;
+}
+
+/**
+ * Rewrite every non-empty line in one format. Numbering restarts per indent level, so a nested
+ * list counts from 1 under each parent.
+ */
+export function applyLineFormat(text: string, format: LineFormat): string {
+  const counters = new Map<number, number>();
+  return text
+    .split("\n")
+    .map((line) => {
+      if (line.trim() === "") return line;
+      const indent = line.match(/^\s*/)?.[0] ?? "";
+      const body = stripLineFormat(line.slice(indent.length));
+      for (const depth of [...counters.keys()]) if (depth > indent.length) counters.delete(depth);
+      switch (format) {
+        case "task":
+          return `${indent}* [ ] ${body}`;
+        case "numbered": {
+          const n = (counters.get(indent.length) ?? 0) + 1;
+          counters.set(indent.length, n);
+          return `${indent}${n}. ${body}`;
+        }
+        case "bullet":
+          return `${indent}- ${body}`;
+        case "code":
+          return `${indent}${asInlineCode(body)}`;
+        default:
+          return `${indent}${body}`;
+      }
+    })
+    .join("\n");
+}
+
+/**
+ * The ☑️ button: text that is not yet a task list becomes one (keeping any items already
+ * ticked); a task list moves on to numbered, then bullets, then inline code, then plain text.
+ */
+export function cycleLineFormat(text: string): string {
+  const current = currentLineFormat(text);
+  if (current === "plain") {
+    // toCheckboxes keeps items that are already tasks, ticked or not, in a mixed entry.
+    const tasks = toCheckboxes(text);
+    if (tasks !== text) return tasks;
+  }
+  const next = LINE_FORMATS[(LINE_FORMATS.indexOf(current) + 1) % LINE_FORMATS.length];
+  return applyLineFormat(text, next);
+}
+
 /**
  * Flip the task marker on a 1-based source line, used when a rendered checkbox is clicked.
  * Returns the text unchanged when that line holds no task marker.

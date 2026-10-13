@@ -142,18 +142,18 @@ export default function ImageCell({
         >
           Edit
         </Btn>
+        <Btn className="download" tip="Download this image as a .png file" onClick={download}>
+          <DownloadIcon />
+        </Btn>
+        <Btn tip="Copy the image to the clipboard" hotkey="c" flash={flashed} onClick={onCopy}>
+          Copy
+        </Btn>
         <Btn
           tip="Copy the image and open Excalidraw in a new window — paste it there with Ctrl+V"
           onClick={openInExcalidraw}
         >
           <span className="label-full">Excalidraw ↗</span>
           <span className="label-short">Xcd ↗</span>
-        </Btn>
-        <Btn tip="Copy the image to the clipboard" hotkey="c" flash={flashed} onClick={onCopy}>
-          Copy
-        </Btn>
-        <Btn className="download" tip="Download this image as a .png file" onClick={download}>
-          <DownloadIcon />
         </Btn>
         {canMerge && (
           <Btn tip="Merge with the image below into one image" hotkey="Shift+M" onClick={onMerge}>
