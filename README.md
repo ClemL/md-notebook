@@ -100,6 +100,19 @@ the codebase, unused, so the feature can be wired back in.
   converted with the first row as the header. Empty fields stay empty cells. To keep prose with
   commas as prose, it needs at least two rows of exactly equal width and either a quoted field or
   three or more columns.
+- **JSON paste becomes a table too.** A JSON array of objects — `az … -o json`, SQL Server's
+  `FOR JSON PATH`, a REST response — is converted with the keys as the header, in the order they
+  first appear. An Azure DevOps `{ "count": n, "value": [ … ] }` envelope is unwrapped, nulls become
+  empty cells, and nested objects are written as compact JSON. A single object or an array of
+  scalars is left as pasted.
+- **Rich copy.** **Rich** on an entry (or `Shift+C`) copies it formatted for Outlook, Teams, Word and
+  Wrike, where markdown otherwise arrives as raw syntax; **Copy All as rich text** in the ⋯ menu
+  does the same for every entry, or the filtered ones. The HTML carries inline styles, since mail
+  clients drop stylesheets, task boxes become ☐ / ☑, and images are included with their annotations
+  painted in. The plain-text flavor is the markdown, so a plain-text target still gets that. Syntax
+  colours are left out: they come from class names that mean nothing once pasted.
+- **TSV for Excel.** A table entry gets a **TSV** button that copies it tab-separated, which Excel
+  splits into cells on paste. Escaped pipes come back as `|`.
 - **Table tools.** An entry that is a markdown table and nothing else gets two controls in each
   header cell: ↕ sorts by that column (click again for descending) and ✕ deletes the column. Numbers,
   currency, `1,200`, percentages and accounting negatives `(4)` sort as numbers; text sorts
@@ -121,7 +134,34 @@ the codebase, unused, so the feature can be wired back in.
 - **Copy All** concatenates entries to the clipboard; **Export All** (⋯ menu, or `Ctrl+S`) downloads them as
   `md-notebook_yyyyMMdd_HHmm.md`; **Backup as .json** writes a lossless file including timestamps.
 - **Import.** Drag a `.md` file anywhere on the page (or use the ⋯ menu) to split it on `---` into
-  entries; drop a `.json` backup to restore or append it.
+  entries; drop a `.json` backup to restore or append it. A `.csv` or `.tsv` file, or a `.json` file
+  holding an array of objects, becomes one table entry; a `.csv` file is read as CSV even with two
+  unquoted columns, which pasted text is not.
+- **Jupyter notebooks.** **Export as .ipynb** (⋯ menu or the Tools panel) writes nbformat 4.5, which
+  opens in VS Code, JupyterLab and GitHub. Every entry is a markdown cell; images travel as cell
+  attachments, so unlike the `.md` export nothing is replaced by a caption. Timestamps, annotations
+  and the image view ride in each cell's `metadata.mdnb`, and an annotated image is attached
+  flattened, so other tools show the markup, with the clean original in the metadata so the shapes
+  stay editable on the way back. Importing a notebook from elsewhere keeps markdown cells as they
+  are, fences code and raw cells (in the notebook's language), puts text output in a `text` fence
+  under its code, and turns image outputs and attachments into image entries.
+- **Command palette** (`p` in command mode, `Ctrl+Shift+P` anywhere, or the ⋯ menu): every action
+  in one filterable list, with its shortcut beside it, so none has to be memorized. Type to filter
+  (every word must match, in the label or its group), ↑/↓ and Enter to run. Entry and table
+  commands act on the selected entry and are greyed out when it does not fit them.
+- **Tools panel** (header **Tools**): the occasional exports, kept out of the toolbars. For the
+  selected table entry: **Copy TSV**, **Copy CSV** and **.csv ⬇**, **Copy JSON** and **.json ⬇**,
+  and T-SQL. **Copy INSERT** writes a `CREATE TABLE` with `NVARCHAR(MAX)` columns and `INSERT …
+  VALUES` in batches of 1000 rows, SQL Server's limit, into the table named in the panel (default
+  `#Pasted`, remembered). **Copy VALUES** writes `SELECT * FROM (VALUES …) AS t (…)`, to join
+  against without creating anything. Plain numbers (`42`, `-3.5`) go in unquoted and as JSON
+  numbers; `007`, `1,200` and `$5` stay text, so an ID or a formatted amount is not altered. Empty
+  cells are `NULL` / `null`, strings are `N'…'` with quotes doubled, and column names are bracketed.
+  For the notebook: rich copy, **Print / PDF**, and `.ipynb` export and import.
+- **Print / save as PDF** (Tools panel, palette, or the browser's `Ctrl+P`): what is on screen —
+  the filtered entries, when searching — in black on white, with every entry at full length,
+  collapsed and clamped ones included, the header and toolbars gone, and each entry headed by its
+  timestamp. Choose *Save as PDF* in the print dialog for a file.
 - **`---` separators toggle** controls whether exported entries are joined with a horizontal rule or
   just a blank line.
 - **New entries go to the top** (⋯ menu) puts new, pasted, templated and imported entries above the
@@ -166,6 +206,9 @@ Every button's tooltip names its shortcut. Outside a text box the notebook is in
 | `Ctrl+Shift+Enter` | New empty entry |
 | `Ctrl+Z` / `Ctrl+Shift+Z` | Undo / redo |
 | `Ctrl+S` | Export all as markdown |
+| `p` / `Ctrl+Shift+P` | Command palette |
+| `Shift+C` | Copy the selected entry as rich text |
+| `Esc` | Close the tools panel |
 | `Ctrl+Alt+C` | Copy all |
 
 ## Marking up an image
@@ -198,7 +241,13 @@ Two ways, for two different needs:
 
 GitHub Flavored Markdown via `remark-gfm`: headings, fenced code blocks (```` ``` ````) with
 syntax highlighting, inline code (`` ` ``), tables, task lists, strikethrough, blockquotes, images,
-and bare-URL autolinking. Single newlines render as line breaks (`remark-breaks`), which suits
+and bare-URL autolinking.
+
+A ```` ```mermaid ```` block is drawn as a diagram — flowcharts, sequence diagrams, ER diagrams,
+Gantt charts — on a white card, so it reads like a pasted picture here and prints the same way.
+Mermaid is about 4 MB, so it is fetched only the first time a diagram appears on screen; a notebook
+without one never loads it. It runs with `securityLevel: "strict"`, which sanitizes labels and
+disables click handlers. A diagram that does not parse shows its first error line above the source. Single newlines render as line breaks (`remark-breaks`), which suits
 pasted lists of links. Raw HTML is **not** rendered, so pasted content cannot inject markup.
 
 ## Local development
@@ -235,8 +284,9 @@ brought into view by scrolling the page behind it.
 
 ## Hosting it yourself
 
-`npm run build:static` writes a self-contained site to `out/` — 1.1 MB of plain files, no Node
-runtime, no server component. Relative asset paths mean it also works opened directly from disk
+`npm run build:static` writes a self-contained site to `out/` — 4.9 MB of plain files, no Node
+runtime, no server component. About 1 MB loads with the page; most of the rest is Mermaid, fetched
+only when a diagram is shown. Relative asset paths mean it also works opened directly from disk
 over `file://`, so a copy in a OneDrive folder runs offline.
 
 `npm run build:static` excludes the Send/Receive API routes, which a file host cannot run — the

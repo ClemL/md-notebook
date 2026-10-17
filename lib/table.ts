@@ -69,7 +69,7 @@ export function repairPipeTable(text: string): string | null {
  * the header, and either a quoted field somewhere or at least three columns. Text with pipe rows
  * is left to the pipe-table repair.
  */
-export function parseCsv(text: string): string[][] | null {
+export function parseCsv(text: string, { strict = true }: { strict?: boolean } = {}): string[][] | null {
   const src = text.replace(/\r\n?/g, "\n").trim();
   if (!src.includes(",") || /^\s*\|/m.test(src)) return null;
 
@@ -112,12 +112,44 @@ export function parseCsv(text: string): string[][] | null {
   if (rows.length < 2) return null;
   const width = rows[0].length;
   if (width < 2 || rows.some((r) => r.length !== width)) return null;
-  if (!sawQuote && width < 3) return null;
+  // A file named .csv is CSV by declaration, so the guard against prose does not apply.
+  if (strict && !sawQuote && width < 3) return null;
   return rows.map((r) => r.map((f) => f.trim()));
+}
+
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+  !!v && typeof v === "object" && !Array.isArray(v);
+
+/** A JSON value as one table cell: nothing for null, nested objects and arrays as compact JSON. */
+const jsonCell = (v: unknown): string =>
+  v === null || v === undefined ? "" : typeof v === "object" ? JSON.stringify(v) : String(v);
+
+/**
+ * A JSON array of objects — `az … -o json`, SQL Server's FOR JSON PATH, a REST response — as
+ * rows, the keys becoming the header in the order they first appear. An Azure DevOps style
+ * `{ "count": n, "value": [ … ] }` envelope is unwrapped. Anything else, a scalar array or a
+ * single object, is not a table.
+ */
+export function parseJsonRows(text: string): string[][] | null {
+  const src = text.trim();
+  if (!/^[[{]/.test(src)) return null;
+  let data: unknown;
+  try {
+    data = JSON.parse(src);
+  } catch {
+    return null;
+  }
+  if (isRecord(data) && Array.isArray(data.value)) data = data.value;
+  if (!Array.isArray(data) || !data.length || !data.every(isRecord)) return null;
+  const keys = [...new Set(data.flatMap((row) => Object.keys(row)))];
+  if (!keys.length) return null;
+  return [keys, ...data.map((row) => keys.map((k) => jsonCell(row[k])))];
 }
 
 /** Markdown table for tabular text, or null when the text is not tabular. */
 export function maybeTable(text: string): string | null {
+  const json = parseJsonRows(text);
+  if (json) return rowsToMarkdownTable(json);
   const delimited = parseDelimited(text);
   if (delimited) return rowsToMarkdownTable(delimited);
   const csv = parseCsv(text);
@@ -206,4 +238,99 @@ export function deleteTableColumn(text: string, col: number): string | null {
   if (!t || t.header.length < 2 || col < 0 || col >= t.header.length) return null;
   const drop = (cells: string[]) => cells.filter((_, i) => i !== col);
   return formatTable({ header: drop(t.header), delimiter: drop(t.delimiter), rows: t.rows.map(drop) });
+}
+
+/* ------------------------------------------------------- copying a table back out */
+
+/** A cell as data rather than markdown: escaped pipes restored, `<br>` read as a line break. */
+const plainCell = (cell: string) => cell.replace(/\\\|/g, "|").replace(/<br\s*\/?>/gi, "\n").trim();
+
+/** Header plus body rows of a table entry as plain values, or null when the text is not a table. */
+export function tableRows(text: string): string[][] | null {
+  const t = parseTable(text);
+  if (!t) return null;
+  return [t.header, ...t.rows].map((row) => row.map(plainCell));
+}
+
+/** Tab-separated, which Excel splits into cells on paste. Tabs and line breaks in a value become spaces. */
+export function toTsv(rows: string[][]): string {
+  return rows.map((row) => row.map((c) => c.replace(/[\t\r\n]+/g, " ")).join("\t")).join("\n") + "\n";
+}
+
+/** RFC 4180: a value holding a comma, quote or line break is quoted, with quotes doubled. CRLF rows. */
+export function toCsv(rows: string[][]): string {
+  const field = (c: string) => (/[",\r\n]/.test(c) ? `"${c.replace(/"/g, '""')}"` : c);
+  return rows.map((row) => row.map(field).join(",")).join("\r\n") + "\r\n";
+}
+
+/**
+ * A number only when it reads back identically: `42`, `-3.5`, `1e6`. `007`, `1,200` and `$5`
+ * stay text, since an ID with leading zeros or a formatted amount is not the number it resembles.
+ */
+function plainNumber(cell: string): number | null {
+  if (!/^-?(0|[1-9]\d*)(\.\d+)?([eE][-+]?\d+)?$/.test(cell)) return null;
+  const n = Number(cell);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Header cells made unique, so no column is lost as a JSON key: `Name`, `Name_2`. */
+function uniqueKeys(header: string[]): string[] {
+  const seen = new Map<string, number>();
+  return header.map((h, i) => {
+    const base = h || `Column${i + 1}`;
+    const n = (seen.get(base) ?? 0) + 1;
+    seen.set(base, n);
+    return n === 1 ? base : `${base}_${n}`;
+  });
+}
+
+/** An array of objects keyed by the header. Plain numbers become numbers; empty cells become null. */
+export function toJsonRows(rows: string[][]): string {
+  const [header, ...body] = rows;
+  const keys = uniqueKeys(header);
+  const objects = body.map((row) =>
+    Object.fromEntries(keys.map((k, i) => [k, row[i] ? (plainNumber(row[i]) ?? row[i]) : null])),
+  );
+  return JSON.stringify(objects, null, 2) + "\n";
+}
+
+const sqlName = (name: string) => `[${name.replace(/]/g, "]]")}]`;
+const sqlValue = (cell: string) =>
+  !cell ? "NULL" : plainNumber(cell) !== null ? cell : `N'${cell.replace(/'/g, "''")}'`;
+const sqlRow = (row: string[], width: number) =>
+  `(${Array.from({ length: width }, (_, i) => sqlValue(row[i] ?? "")).join(", ")})`;
+
+/** SQL Server accepts at most 1000 rows in one VALUES list. */
+const SQL_BATCH = 1000;
+
+/**
+ * T-SQL that loads the table: a CREATE TABLE with NVARCHAR(MAX) columns (left for you to
+ * tighten) and INSERT statements in batches of 1000 rows. Plain numbers go in unquoted, empty
+ * cells as NULL, everything else as N'…' with quotes doubled.
+ */
+export function toSqlInsert(rows: string[][], table = "#Pasted"): string {
+  const [header, ...body] = rows;
+  const cols = uniqueKeys(header).map(sqlName);
+  const target = table.trim() || "#Pasted";
+  const out = [
+    `CREATE TABLE ${target} (\n${cols.map((c) => `    ${c} NVARCHAR(MAX) NULL`).join(",\n")}\n);`,
+  ];
+  for (let i = 0; i < body.length; i += SQL_BATCH) {
+    const batch = body.slice(i, i + SQL_BATCH).map((r) => `    ${sqlRow(r, cols.length)}`);
+    out.push(`INSERT INTO ${target} (${cols.join(", ")}) VALUES\n${batch.join(",\n")};`);
+  }
+  return out.join("\n\n") + "\n";
+}
+
+/**
+ * The table as an inline derived table, for joining against without creating anything:
+ * `SELECT * FROM (VALUES …) AS t ([A], [B])`. A table constructor has no 1000-row limit.
+ */
+export function toSqlValues(rows: string[][], alias = "t"): string {
+  const [header, ...body] = rows;
+  const cols = uniqueKeys(header).map(sqlName);
+  const values = body.length
+    ? body.map((r) => `    ${sqlRow(r, cols.length)}`).join(",\n")
+    : `    ${sqlRow([], cols.length)}`;
+  return `SELECT *\nFROM (VALUES\n${values}\n) AS ${alias} (${cols.join(", ")});\n`;
 }
