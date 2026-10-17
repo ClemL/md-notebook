@@ -37,6 +37,10 @@ type Props = {
   onCheckbox: () => void;
   onToggleTask: (line: number) => void;
   onCopy: () => void;
+  /** Copy as HTML plus markdown, for Outlook, Teams and Word. */
+  onCopyRich: () => void;
+  /** Copy a table entry as tab-separated values, for Excel. */
+  onCopyTsv: () => void;
   onDelete: () => void;
   onMove: (delta: -1 | 1) => void;
   onImageChange: (next: StoredImage) => void;
@@ -55,8 +59,8 @@ type Props = {
   onFlash: (action: FlashAction | "append") => void;
 };
 
-/** Entry buttons that light up green once used: copy, append to clipboard, and checkbox. */
-export type FlashAction = "copy" | "check";
+/** Entry buttons that light up green once used: copy, rich copy, TSV, append, and checkbox. */
+export type FlashAction = "copy" | "check" | "rich" | "tsv";
 
 export default function CellView({
   cell,
@@ -76,6 +80,8 @@ export default function CellView({
   onCheckbox,
   onToggleTask,
   onCopy,
+  onCopyRich,
+  onCopyTsv,
   onDelete,
   onMove,
   onImageChange,
@@ -358,6 +364,25 @@ export default function CellView({
         >
           Copy
         </Btn>
+        <Btn
+          tip="Copy formatted, for Outlook, Teams and Word"
+          hotkey="Shift+C"
+          flash={flashed === "rich"}
+          onMouseDown={keepFocus}
+          onClick={onCopyRich}
+        >
+          Rich
+        </Btn>
+        {parsedTable && (
+          <Btn
+            tip="Copy this table as tab-separated values, for Excel"
+            flash={flashed === "tsv"}
+            onMouseDown={keepFocus}
+            onClick={onCopyTsv}
+          >
+            TSV
+          </Btn>
+        )}
         <Btn
           tip="Append this entry to the clipboard, after a --- rule"
           flash={appended}

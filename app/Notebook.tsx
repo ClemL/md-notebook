@@ -5,6 +5,8 @@ import Btn from "./Btn";
 import CellView, { type FlashAction } from "./CellView";
 import { VIEWS as IMAGE_VIEWS } from "./ImageCell";
 import Dropdown from "./Dropdown";
+import CommandPalette from "./CommandPalette";
+import ToolsPanel from "./ToolsPanel";
 import { FlashProvider, useFlash } from "./flash";
 import {
   Cell,
@@ -30,6 +32,8 @@ import {
 import { mergeTexts, splitAt } from "@/lib/editor";
 import {
   copyImage,
+  dataUrlToBlob,
+  flattenAnnotations,
   imageFromTransfer,
   readClipboardImage,
   stackImages,
@@ -37,7 +41,20 @@ import {
   type ImageView,
   type StoredImage,
 } from "@/lib/image";
-import { maybeTable } from "@/lib/table";
+import {
+  maybeTable,
+  parseCsv,
+  parseDelimited,
+  parseJsonRows,
+  rowsToMarkdownTable,
+  tableRows,
+  toCsv,
+  toJsonRows,
+  toTsv,
+} from "@/lib/table";
+import { parseIpynb, partsToCells, toIpynb } from "@/lib/ipynb";
+import { blobToDataUrl, imageHtml, joinHtml, markdownToHtml, writeRichClipboard } from "@/lib/richCopy";
+import type { Command } from "@/lib/commands";
 import { readClipboardSmart, statusFirstWorkItems } from "@/lib/richPaste";
 import { TEMPLATES } from "@/lib/templates";
 
@@ -91,6 +108,8 @@ function NotebookInner() {
   const [loaded, setLoaded] = useState(false);
   const [rawIds, setRawIds] = useState<Record<string, boolean>>({});
   const [toast, setToast] = useState<Toast | null>(null);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [toolsOpen, setToolsOpen] = useState(false);
 
   const cellsRef = useRef<Cell[]>([]);
   const pastRef = useRef<Cell[][]>([]);
@@ -617,6 +636,90 @@ function NotebookInner() {
     say(`Saved ${name} (all ${cells.length} entries, timestamps included).`);
   }, [cells, flash, say]);
 
+  /** Entries as pasteable HTML: markdown rendered, images with their annotations painted in. */
+  const richHtml = useCallback(async (list: Cell[]) => {
+    const parts = await Promise.all(
+      list.map(async (c) => {
+        if (!c.image) return c.text.trim() ? markdownToHtml(c.text) : "";
+        const src = await blobToDataUrl(await flattenAnnotations(c.image));
+        return imageHtml(src, c.image.width, c.image.name ?? "image");
+      }),
+    );
+    return joinHtml(parts, separators);
+  }, [separators]);
+
+  const copyRich = useCallback(
+    async (list: Cell[], flashId: string, message: string) => {
+      if (!list.some((c) => c.image || c.text.trim())) return say("Nothing to copy.");
+      try {
+        await writeRichClipboard(await richHtml(list), joinCells(list, separators));
+        flash(flashId, { clipboard: true });
+        say(message);
+      } catch {
+        say("Copy failed — the browser blocked clipboard write.");
+      }
+    },
+    [richHtml, separators, flash, say],
+  );
+
+  const copyEntryRich = useCallback(
+    (id: string) => {
+      const cell = cellsRef.current.find((c) => c.id === id);
+      if (cell) void copyRich([cell], `${id}:rich`, "Entry copied as rich text, for Outlook, Teams and Word.");
+    },
+    [copyRich],
+  );
+
+  const copyAllRich = useCallback(() => {
+    void copyRich(
+      visible,
+      "copy-all-rich",
+      `Copied ${visible.length} ${visible.length === 1 ? "entry" : "entries"} as rich text${filtering ? " (filtered)" : ""}.`,
+    );
+  }, [copyRich, visible, filtering]);
+
+  const copyText = useCallback(
+    async (flashId: string, text: string, message: string) => {
+      try {
+        await writeClipboard(text);
+        flash(flashId, { clipboard: true });
+        say(message);
+      } catch {
+        say("Copy failed — the browser blocked clipboard write.");
+      }
+    },
+    [flash, say],
+  );
+
+  const copyTsv = useCallback(
+    (id: string) => {
+      const rows = tableRows(cellsRef.current.find((c) => c.id === id)?.text ?? "");
+      if (!rows) return say("That entry is not a table.");
+      void copyText(`${id}:tsv`, toTsv(rows), `Copied ${rows.length - 1} rows as TSV — paste into Excel.`);
+    },
+    [copyText, say],
+  );
+
+  const exportIpynb = useCallback(async () => {
+    if (!visible.length) return say("Nothing to export.");
+    // Annotated images are flattened for other tools to show; the clean original rides along.
+    const flattened = new Map<string, string>();
+    for (const c of visible) {
+      if (c.image?.annotations?.length) flattened.set(c.id, await blobToDataUrl(await flattenAnnotations(c.image)));
+    }
+    const name = `md-notebook_${timestamp()}.ipynb`;
+    downloadText(name, toIpynb(visible, flattened), "application/x-ipynb+json");
+    flash("export-ipynb");
+    say(`Exported ${name}${filtering ? " (filtered)" : ""}, images included.`);
+  }, [visible, filtering, flash, say]);
+
+  const print = useCallback(() => {
+    setToolsOpen(false);
+    setPaletteOpen(false);
+    // After the panel has unmounted, so it is not in the printout's layout.
+    requestAnimationFrame(() => window.print());
+  }, []);
+
   const clearAll = useCallback(() => {
     if (!cells.length) return;
     if (!window.confirm(`Delete all ${cells.length} entries? Ctrl+Z can undo this.`)) return;
@@ -641,12 +744,45 @@ function NotebookInner() {
           continue;
         }
         const body = await file.text();
-        if (file.name.toLowerCase().endsWith(".json")) {
+        const lower = file.name.toLowerCase();
+        if (lower.endsWith(".ipynb")) {
+          try {
+            const imported = await partsToCells(parseIpynb(body), (dataUrl) => storeImage(dataUrlToBlob(dataUrl)));
+            if (!imported.length) {
+              say(`${file.name} has no cells to import.`);
+              continue;
+            }
+            apply(place(cellsRef.current, imported));
+            added += imported.length;
+          } catch (err) {
+            say(err instanceof Error ? `${file.name}: ${err.message}` : `${file.name} could not be imported.`);
+          }
+          continue;
+        }
+        // A data file becomes one table entry: CSV and TSV by extension, JSON when it is an array
+        // of objects rather than a backup.
+        const rows = lower.endsWith(".csv")
+          ? parseCsv(body, { strict: false })
+          : lower.endsWith(".tsv")
+            ? parseDelimited(body)
+            : lower.endsWith(".json")
+              ? parseJsonRows(body)
+              : null;
+        if (rows) {
+          apply(place(cellsRef.current, [makeCell(rowsToMarkdownTable(rows))]));
+          added += 1;
+          continue;
+        }
+        if (lower.endsWith(".csv") || lower.endsWith(".tsv")) {
+          say(`${file.name} could not be read as a table.`);
+          continue;
+        }
+        if (lower.endsWith(".json")) {
           let restored: Cell[];
           try {
             restored = parseBackup(body);
           } catch {
-            say(`${file.name} is not a md-notebook backup.`);
+            say(`${file.name} is not a md-notebook backup or a JSON array of objects.`);
             continue;
           }
           const replace =
@@ -744,6 +880,11 @@ function NotebookInner() {
         void newFromClipboard();
         return;
       }
+      if (mod && e.shiftKey && e.key.toLowerCase() === "p") {
+        e.preventDefault();
+        setPaletteOpen(true);
+        return;
+      }
       if (mod && e.key.toLowerCase() === "k") {
         e.preventDefault();
         searchRef.current?.focus();
@@ -769,6 +910,19 @@ function NotebookInner() {
 
       // Command mode: no text field has focus.
       switch (e.key) {
+        case "p":
+          e.preventDefault();
+          setPaletteOpen(true);
+          break;
+        case "Escape":
+          setToolsOpen(false);
+          break;
+        case "C":
+          if (selectedId) {
+            e.preventDefault();
+            copyEntryRich(selectedId);
+          }
+          break;
         case "j":
         case "ArrowDown":
           e.preventDefault();
@@ -850,6 +1004,7 @@ function NotebookInner() {
     beginEdit,
     checkbox,
     copyAll,
+    copyEntryRich,
     exportAll,
     insertBefore,
     mergeWithNext,
@@ -861,6 +1016,117 @@ function NotebookInner() {
     selectRelative,
     selectedId,
     undo,
+  ]);
+
+  /* -------------------------------------------------------------- palette */
+
+  const selectedCell = cells.find((c) => c.id === selectedId) ?? null;
+  const selectedTable = useMemo(
+    () => (selectedCell && !selectedCell.image ? tableRows(selectedCell.text) : null),
+    [selectedCell],
+  );
+  const selectedLabel = selectedCell ? `[${cells.indexOf(selectedCell) + 1}]` : null;
+
+  // Every action the notebook offers, for the command palette. Entry and table commands act on
+  // the selected entry and are disabled when it does not fit them.
+  const commands = useMemo((): Command[] => {
+    const id = selectedCell?.id;
+    const text = !!selectedCell && !selectedCell.image;
+    const noEntry = !id;
+    const tableCopy = (key: string, label: string, format: (rows: string[][]) => string) => ({
+      id: `table-${key}`,
+      group: "Table",
+      label,
+      disabled: !selectedTable,
+      run: () => selectedTable && void copyText(`tools:${key}`, format(selectedTable), `Copied the table as ${key.toUpperCase()}.`),
+    });
+    return [
+      { id: "paste", group: "New", label: "New entry from clipboard", hotkey: "Ctrl+Shift+V", run: () => void newFromClipboard() },
+      { id: "new", group: "New", label: "New empty entry", hotkey: "Ctrl+Shift+Enter", run: () => appendCell("") },
+      ...TEMPLATES.map((t) => ({ id: `tpl-${t.id}`, group: "Template", label: t.label, run: () => insertTemplate(t.id) })),
+      { id: "edit", group: "Entry", label: "Edit", hotkey: "Enter", disabled: !text, run: () => id && beginEdit(id) },
+      {
+        id: "copy",
+        group: "Entry",
+        label: "Copy markdown",
+        hotkey: "c",
+        disabled: noEntry,
+        run: () => {
+          if (!selectedCell) return;
+          if (selectedCell.image) void copyImage(selectedCell.image).then(() => say("Image copied to the clipboard."));
+          else void copyText(selectedCell.id, selectedCell.text, "Entry copied.");
+        },
+      },
+      { id: "rich", group: "Entry", label: "Copy as rich text (Outlook, Teams)", hotkey: "Shift+C", disabled: noEntry, run: () => id && copyEntryRich(id) },
+      { id: "tsv", group: "Table", label: "Copy as TSV (Excel)", disabled: !selectedTable, run: () => id && copyTsv(id) },
+      tableCopy("csv", "Copy as CSV", toCsv),
+      tableCopy("json", "Copy as JSON", toJsonRows),
+      { id: "table-sql", group: "Table", label: "Copy as SQL INSERT / VALUES…", disabled: !selectedTable, run: () => setToolsOpen(true) },
+      { id: "tasks", group: "Entry", label: "Cycle line format (tasks, numbered, bullets…)", hotkey: "t", disabled: !text, run: () => id && checkbox(id) },
+      { id: "raw", group: "Entry", label: "Toggle raw markdown", hotkey: "r", disabled: !text, run: () => id && setRawIds((p) => ({ ...p, [id]: !p[id] })) },
+      { id: "collapse", group: "Entry", label: "Collapse / expand", disabled: noEntry, run: () => id && toggleCollapsed(id) },
+      { id: "merge", group: "Entry", label: "Merge with the entry below", hotkey: "Shift+M", disabled: noEntry, run: () => id && mergeWithNext(id) },
+      { id: "up", group: "Entry", label: "Move up", hotkey: "Alt+↑", disabled: noEntry, run: () => id && move(id, -1) },
+      { id: "down", group: "Entry", label: "Move down", hotkey: "Alt+↓", disabled: noEntry, run: () => id && move(id, 1) },
+      { id: "above", group: "Entry", label: "Insert entry above", hotkey: "a", disabled: noEntry, run: () => id && insertBefore(id) },
+      { id: "below", group: "Entry", label: "Insert entry below", hotkey: "b", run: () => appendCell("", id) },
+      { id: "delete", group: "Entry", label: "Delete", hotkey: "dd", disabled: noEntry, run: () => id && remove(id) },
+      { id: "search", group: "Notebook", label: "Search", hotkey: "/", run: () => searchRef.current?.focus() },
+      { id: "copy-all", group: "Notebook", label: "Copy all as markdown", hotkey: "Ctrl+Alt+C", run: () => void copyAll() },
+      { id: "copy-all-rich", group: "Notebook", label: "Copy all as rich text", run: copyAllRich },
+      { id: "export-md", group: "Notebook", label: "Export as .md", hotkey: "Ctrl+S", run: exportAll },
+      { id: "export-ipynb", group: "Notebook", label: "Export as .ipynb (Jupyter, images included)", run: () => void exportIpynb() },
+      { id: "backup", group: "Notebook", label: "Backup as .json", run: backup },
+      { id: "import", group: "Notebook", label: "Import .md / .json / .ipynb / .csv…", run: () => fileRef.current?.click() },
+      { id: "print", group: "Notebook", label: "Print / save as PDF", hotkey: "Ctrl+P", run: print },
+      { id: "tools", group: "Notebook", label: "Open the tools panel", run: () => setToolsOpen(true) },
+      { id: "fold-all", group: "Notebook", label: allCollapsed ? "Expand all" : "Collapse all", run: toggleCollapseAll },
+      { id: "checkbox-all", group: "Notebook", label: "Checkbox all", run: checkboxAll },
+      { id: "undo", group: "Notebook", label: "Undo", hotkey: "Ctrl+Z", run: undo },
+      { id: "redo", group: "Notebook", label: "Redo", hotkey: "Ctrl+Shift+Z", run: redo },
+      { id: "compact", group: "View", label: `Compact mode: ${compact ? "turn off" : "turn on"}`, run: () => setCompact((v) => !v) },
+      { id: "wide", group: "View", label: `Wide mode: ${wide ? "turn off" : "turn on"}`, run: () => setWide((v) => !v) },
+      { id: "hints", group: "View", label: `Shortcut hints: ${showHint ? "hide" : "show"}`, run: () => setShowHint((v) => !v) },
+      { id: "separators", group: "Option", label: `--- between entries on export: ${separators ? "turn off" : "turn on"}`, run: () => setSeparators((v) => !v) },
+      { id: "richpaste", group: "Option", label: `Convert rich paste to markdown: ${richPaste ? "turn off" : "turn on"}`, run: () => setRichPaste((v) => !v) },
+      { id: "top", group: "Option", label: `New entries go to the top: ${insertTop ? "turn off" : "turn on"}`, run: () => setInsertTop((v) => !v) },
+      { id: "delete-all", group: "Notebook", label: "Delete all entries", run: clearAll },
+    ];
+  }, [
+    selectedCell,
+    selectedTable,
+    newFromClipboard,
+    appendCell,
+    insertTemplate,
+    beginEdit,
+    copyText,
+    copyEntryRich,
+    copyTsv,
+    checkbox,
+    toggleCollapsed,
+    mergeWithNext,
+    move,
+    insertBefore,
+    remove,
+    copyAll,
+    copyAllRich,
+    exportAll,
+    exportIpynb,
+    backup,
+    print,
+    allCollapsed,
+    toggleCollapseAll,
+    checkboxAll,
+    undo,
+    redo,
+    compact,
+    wide,
+    showHint,
+    separators,
+    richPaste,
+    insertTop,
+    clearAll,
+    say,
   ]);
 
   /* ----------------------------------------------------------------- view */
@@ -931,6 +1197,15 @@ function NotebookInner() {
           Copy{filtering ? ` (${visible.length})` : " All"}
         </Btn>
 
+        <Btn
+          className="tools-toggle"
+          tip="Tools: table as CSV, JSON or SQL; print; Jupyter export"
+          onClick={() => setToolsOpen((v) => !v)}
+          aria-pressed={toolsOpen}
+        >
+          Tools
+        </Btn>
+
         <Dropdown label="Templates" tip="Insert a template" align="right">
           <span className="menu-label">Insert template</span>
           {TEMPLATES.map((t) => (
@@ -941,12 +1216,22 @@ function NotebookInner() {
         </Dropdown>
 
         <Dropdown label="⋯" tip="More actions" align="right">
+          <button onClick={() => setPaletteOpen(true)}>
+            Command palette… <kbd>p</kbd>
+          </button>
           <button
             title={filtering ? "Download the filtered entries as .md" : "Download every entry as one .md file"}
             onClick={exportAll}
             disabled={!visible.length}
           >
             Export{filtering ? ` (${visible.length})` : " All"} <kbd>Ctrl+S</kbd>
+          </button>
+          <button
+            title={filtering ? "Copy the filtered entries formatted, for Outlook, Teams and Word" : "Copy every entry formatted, for Outlook, Teams and Word"}
+            onClick={copyAllRich}
+            disabled={!visible.length}
+          >
+            Copy{filtering ? ` (${visible.length})` : " All"} as rich text
           </button>
           <button onClick={checkboxAll}>
             Checkbox All <kbd>t</kbd>
@@ -968,8 +1253,15 @@ function NotebookInner() {
             </span>
           </div>
           <hr />
-          <button onClick={() => fileRef.current?.click()}>Import .md / .json…</button>
+          <button onClick={() => fileRef.current?.click()}>Import .md / .json / .ipynb / .csv…</button>
           <button onClick={backup}>Backup as .json</button>
+          <button
+            title={filtering ? "Download the filtered entries as a Jupyter notebook" : "Download every entry as a Jupyter notebook, images included"}
+            onClick={() => void exportIpynb()}
+            disabled={!visible.length}
+          >
+            Export as .ipynb
+          </button>
           <hr />
           <label>
             <input type="checkbox" checked={separators} onChange={(e) => setSeparators(e.target.checked)} />
@@ -1007,7 +1299,7 @@ function NotebookInner() {
       <input
         ref={fileRef}
         type="file"
-        accept=".md,.markdown,.txt,.json"
+        accept=".md,.markdown,.txt,.json,.ipynb,.csv,.tsv"
         multiple
         hidden
         onChange={(e) => {
@@ -1029,8 +1321,8 @@ function NotebookInner() {
             Entries render on blur. <kbd>Esc</kbd>/<kbd>Ctrl+Enter</kbd> commits · <kbd>j</kbd>
             <kbd>k</kbd> move · <kbd>Enter</kbd> edit · <kbd>a</kbd>/<kbd>b</kbd> insert ·{" "}
             <kbd>dd</kbd> delete · <kbd>r</kbd> raw · <kbd>Shift+M</kbd> merge ·{" "}
-            <kbd>Ctrl+Shift+-</kbd> split · <kbd>/</kbd> search. Stored in this
-            browser only.
+            <kbd>Ctrl+Shift+-</kbd> split · <kbd>/</kbd> search · <kbd>p</kbd> commands. Stored in
+            this browser only.
           </span>
           <button className="hint-close" onClick={() => setShowHint(false)} aria-label="Hide the shortcut hints">
             ✕
@@ -1078,6 +1370,8 @@ function NotebookInner() {
             onChange={(text) => update(cell.id, text)}
             onCheckbox={() => checkbox(cell.id)}
             onToggleTask={(line) => toggleTask(cell.id, line)}
+            onCopyRich={() => copyEntryRich(cell.id)}
+            onCopyTsv={() => copyTsv(cell.id)}
             onDelete={() => remove(cell.id)}
             onMove={(d) => move(cell.id, d)}
             richPaste={richPaste}
@@ -1111,7 +1405,28 @@ function NotebookInner() {
         ))
       )}
 
-      {dragging && <div className="dropzone">Drop .md or .json to import</div>}
+      {toolsOpen && (
+        <ToolsPanel
+          table={selectedTable}
+          entryLabel={selectedLabel}
+          filtering={filtering}
+          flashed={flashed}
+          onCopy={(flashId, text, message) => void copyText(flashId, text, message)}
+          onDownload={(flashId, name, text, mime) => {
+            downloadText(name, text, mime);
+            flash(flashId);
+            say(`Downloaded ${name}`);
+          }}
+          onCopyAllRich={copyAllRich}
+          onPrint={print}
+          onExportIpynb={() => void exportIpynb()}
+          onImport={() => fileRef.current?.click()}
+          onClose={() => setToolsOpen(false)}
+        />
+      )}
+      {paletteOpen && <CommandPalette commands={commands} onClose={() => setPaletteOpen(false)} />}
+
+      {dragging && <div className="dropzone">Drop .md, .json, .ipynb or .csv to import</div>}
       {toast && (
         <div className="toast" role="status">
           <span>{toast.message}</span>

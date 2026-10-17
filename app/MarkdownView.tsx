@@ -7,9 +7,10 @@ import rehypeHighlight from "rehype-highlight";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 import { writeClipboard } from "@/lib/markdown";
+import MermaidDiagram from "./Mermaid";
 
 /** Renders a cell's markdown: GFM (tables, task lists, strikethrough, autolinks),
- *  single-newline line breaks, and syntax-highlighted fenced code. Raw HTML is not
+ *  single-newline line breaks, syntax-highlighted fenced code, and ```mermaid diagrams. Raw HTML is not
  *  rendered, so pasted content cannot inject markup. */
 /** Sort and column-delete controls for an entry that is a single markdown table. */
 export type TableTools = {
@@ -67,7 +68,11 @@ export default function MarkdownView({
         {children}
       </a>
     ),
-    pre: ({ children }) => <CodeBlock>{children}</CodeBlock>,
+    pre: ({ children, node }) => {
+      const mermaid = mermaidSource(node);
+      const block = <CodeBlock>{children}</CodeBlock>;
+      return mermaid === null ? block : <MermaidDiagram code={mermaid} fallback={block} />;
+    },
     // remark-gfm emits a disabled checkbox for task items; the <li> override renders a live one.
     input: () => null,
     li: ({ children, node, className, ...props }) => {
@@ -174,6 +179,16 @@ function taskState(node: Element | undefined): boolean | null {
   if (!input) return null;
   const checked = input.properties?.checked;
   return typeof checked === "boolean" ? checked : checked === "" || checked === "checked";
+}
+
+/** The source of a ```mermaid fenced block, or null for any other <pre>. */
+function mermaidSource(pre: Element | undefined): string | null {
+  const code = pre?.children.find((c): c is Element => c.type === "element" && c.tagName === "code");
+  const classes = code?.properties?.className;
+  if (!code || !Array.isArray(classes) || !classes.includes("language-mermaid")) return null;
+  const text = (node: Element | Element["children"][number]): string =>
+    node.type === "text" ? node.value : node.type === "element" ? node.children.map(text).join("") : "";
+  return text(code);
 }
 
 function CodeBlock({ children }: { children: React.ReactNode }) {

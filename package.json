@@ -14,7 +14,9 @@
   },
   "dependencies": {
     "@joplin/turndown-plugin-gfm": "^1.0.68",
+    "hast-util-to-html": "9.0.5",
     "highlight.js": "11.11.1",
+    "mermaid": "11.17.2",
     "next": "^16.3.5",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
@@ -22,7 +24,10 @@
     "rehype-highlight": "7.0.2",
     "remark-breaks": "4.0.0",
     "remark-gfm": "4.0.1",
-    "turndown": "^7.2.4"
+    "remark-parse": "11.0.0",
+    "remark-rehype": "11.1.2",
+    "turndown": "^7.2.4",
+    "unified": "11.0.5"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
