@@ -55,6 +55,7 @@ import {
 import { parseIpynb, partsToCells, toIpynb } from "@/lib/ipynb";
 import { blobToDataUrl, imageHtml, joinHtml, markdownToHtml, writeRichClipboard } from "@/lib/richCopy";
 import type { Command } from "@/lib/commands";
+import { THEMES, THEME_KEY, applyTheme, isThemeId, type ThemeId } from "@/lib/theme";
 import { readClipboardSmart, statusFirstWorkItems } from "@/lib/richPaste";
 import { TEMPLATES } from "@/lib/templates";
 
@@ -102,6 +103,7 @@ function NotebookInner() {
   /** The size every image was last set to from the menu; new pastes start at it too. */
   const [imageView, setImageViewDefault] = useState<ImageView>("thumb");
   const [showHint, setShowHint] = useState(true);
+  const [theme, setTheme] = useState<ThemeId>("terminal");
   const [collapsedIds, setCollapsedIds] = useState<Record<string, boolean>>({});
   const [storageOk, setStorageOk] = useState(true);
   const [dragging, setDragging] = useState(false);
@@ -197,6 +199,8 @@ function NotebookInner() {
     setCompact(localStorage.getItem(COMPACT_KEY) === "1");
     setWide(localStorage.getItem(WIDE_KEY) === "1");
     setShowHint(localStorage.getItem(HINT_KEY) !== "0");
+    const savedTheme = localStorage.getItem(THEME_KEY);
+    if (isThemeId(savedTheme)) setTheme(savedTheme);
     const savedView = localStorage.getItem(IMAGE_VIEW_KEY) as ImageView | null;
     if (savedView && IMAGE_VIEW_VALUES.includes(savedView)) setImageViewDefault(savedView);
     try {
@@ -246,6 +250,12 @@ function NotebookInner() {
   useEffect(() => {
     if (loaded) localStorage.setItem(IMAGE_VIEW_KEY, imageView);
   }, [imageView, loaded]);
+
+  useEffect(() => {
+    if (!loaded) return;
+    applyTheme(theme);
+    localStorage.setItem(THEME_KEY, theme);
+  }, [theme, loaded]);
 
   // Only ids that still exist are remembered, so the list cannot grow without bound.
   useEffect(() => {
@@ -1086,6 +1096,12 @@ function NotebookInner() {
       { id: "redo", group: "Notebook", label: "Redo", hotkey: "Ctrl+Shift+Z", run: redo },
       { id: "compact", group: "View", label: `Compact mode: ${compact ? "turn off" : "turn on"}`, run: () => setCompact((v) => !v) },
       { id: "wide", group: "View", label: `Wide mode: ${wide ? "turn off" : "turn on"}`, run: () => setWide((v) => !v) },
+      ...THEMES.map((t) => ({
+        id: `theme-${t.id}`,
+        group: "Theme",
+        label: `${t.label}${t.id === theme ? " (current)" : ""}`,
+        run: () => setTheme(t.id),
+      })),
       { id: "hints", group: "View", label: `Shortcut hints: ${showHint ? "hide" : "show"}`, run: () => setShowHint((v) => !v) },
       { id: "separators", group: "Option", label: `--- between entries on export: ${separators ? "turn off" : "turn on"}`, run: () => setSeparators((v) => !v) },
       { id: "richpaste", group: "Option", label: `Convert rich paste to markdown: ${richPaste ? "turn off" : "turn on"}`, run: () => setRichPaste((v) => !v) },
@@ -1122,6 +1138,7 @@ function NotebookInner() {
     compact,
     wide,
     showHint,
+    theme,
     separators,
     richPaste,
     insertTop,
@@ -1248,6 +1265,22 @@ function NotebookInner() {
                   onClick={() => setAllImageViews(v.view)}
                 >
                   {v.label}
+                </button>
+              ))}
+            </span>
+          </div>
+          <div className="menu-row" role="group" aria-label="Theme">
+            <span>Theme</span>
+            <span className="view-group">
+              {THEMES.map((t) => (
+                <button
+                  key={t.id}
+                  title={t.tip}
+                  aria-pressed={theme === t.id}
+                  className={theme === t.id ? "on" : undefined}
+                  onClick={() => setTheme(t.id)}
+                >
+                  {t.label}
                 </button>
               ))}
             </span>

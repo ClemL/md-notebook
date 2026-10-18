@@ -1,0 +1,446 @@
+/*
+ * Alternative looks, chosen under ⋯ → Theme and set as data-theme on <html> (so portalled menus
+ * and the palette follow). Terminal, the original, has no attribute and lives in globals.css.
+ *
+ * Each theme redefines globals.css's colour variables, then adjusts type and shape. Everything
+ * is screen-only: printing keeps the black-on-white print stylesheet whatever the theme.
+ */
+
+@media screen {
+  /* ------------------------------------------------------------------ Paper */
+  /* Light and reading-first: serif prose on warm paper, sans-serif controls, card shadows
+     instead of outlines, and entry toolbars that appear only where you are working. */
+
+  :root[data-theme="paper"] {
+    color-scheme: light;
+    --bg: #f6f3ec;
+    --panel: #fffdf8;
+    --panel-2: #f3efe6;
+    --border: #e6e0d2;
+    --border-strong: #d3cbb8;
+    --fg: #2a2724;
+    --fg-dim: #6c665b;
+    --accent: #9a4a24;
+    --danger: #b3261e;
+    --danger-border: #e3b4ae;
+    --hover: #ece6d9;
+    --hover-border: #d3cbb8;
+    --primary-bg: #9a4a24;
+    --primary-border: #9a4a24;
+    --primary-fg: #ffffff;
+    --primary-hover: #85401f;
+    --bar-bg: rgba(246, 243, 236, 0.94);
+    --overlay: rgba(246, 243, 236, 0.86);
+    --focus-ring: rgba(154, 74, 36, 0.18);
+    --selected-border: transparent;
+    --well: #f7f2e8;
+    --code-bg: #24211c;
+    --code-inline-bg: #f1eadb;
+    --kbd-bg: #fffdf8;
+    --tip-bg: #2a2724;
+    --input-focus: #9a4a24;
+    --flash-bg: #e3f1e5;
+    --flash-border: #8cc39a;
+    --flash-fg: #1f6a35;
+    --flash-hover-bg: #d4ead8;
+    --flash-hover-border: #6fb07f;
+    --collapsed-border: transparent;
+    --collapsed-edge: #c9bfa9;
+    --collapsed-head: transparent;
+    --mono: "Cascadia Mono", Consolas, "Liberation Mono", monospace;
+    --sans: "Segoe UI", Inter, system-ui, sans-serif;
+    --serif: Charter, "Bitstream Charter", Cambria, Georgia, serif;
+  }
+
+  [data-theme="paper"] body,
+  [data-theme="paper"] button,
+  [data-theme="paper"] .search input,
+  [data-theme="paper"] kbd {
+    font-family: var(--sans);
+  }
+
+  [data-theme="paper"] button {
+    font-size: 12.5px;
+    border-radius: 6px;
+  }
+
+  [data-theme="paper"] .cell-head button:not([data-flash="on"]) {
+    background: transparent;
+    border-color: transparent;
+  }
+
+  [data-theme="paper"] .tip {
+    color: #f6f3ec;
+  }
+
+  [data-theme="paper"] .title {
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 21px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 0;
+  }
+
+  [data-theme="paper"] .search input {
+    font-size: 13px;
+    background: var(--panel);
+    border-radius: 999px;
+    padding: 6px 14px;
+  }
+
+  [data-theme="paper"] .cell {
+    background: var(--panel);
+    border: 0;
+    border-radius: 10px;
+    box-shadow: 0 1px 2px rgba(60, 45, 20, 0.06), 0 4px 16px rgba(60, 45, 20, 0.06);
+    margin-bottom: 18px;
+  }
+
+  [data-theme="paper"] .cell.selected,
+  [data-theme="paper"] .cell.editing {
+    box-shadow: inset 3px 0 0 var(--accent), 0 1px 2px rgba(60, 45, 20, 0.08), 0 6px 20px rgba(60, 45, 20, 0.1);
+  }
+
+  [data-theme="paper"] .cell.collapsed {
+    box-shadow: inset 3px 0 0 var(--collapsed-edge), 0 1px 2px rgba(60, 45, 20, 0.06);
+  }
+
+  [data-theme="paper"] .cell-head {
+    background: transparent;
+    border-bottom: 0;
+    padding: 8px 14px 0;
+  }
+
+  /* Toolbars recede until wanted: shown on the selected or edited entry, under the pointer, or
+     when a control inside has keyboard focus. Touch screens have no hover, so they keep them, as
+     do windows narrow enough for the toolbar to wrap, where hiding it would leave a blank band. */
+  @media (hover: hover) and (min-width: 821px) {
+    [data-theme="paper"] .cell-head .tipwrap {
+      transition: opacity 120ms;
+    }
+
+    [data-theme="paper"] .cell:not(.selected):not(.editing):not(:hover):not(:focus-within) .cell-head .tipwrap {
+      opacity: 0;
+    }
+  }
+
+  [data-theme="paper"] .cell-index,
+  [data-theme="paper"] .stamp,
+  [data-theme="paper"] .cell-meta {
+    font-family: var(--sans);
+    font-size: 11.5px;
+  }
+
+  [data-theme="paper"] .cell-body {
+    padding: 0 28px 6px;
+  }
+
+  [data-theme="paper"] .md {
+    font-family: var(--serif);
+    font-size: 16px;
+    line-height: 1.65;
+  }
+
+  [data-theme="paper"] .md h1 {
+    font-size: 1.7em;
+    letter-spacing: -0.01em;
+    border-bottom: 0;
+    padding-bottom: 0;
+  }
+
+  [data-theme="paper"] .md h2 {
+    font-size: 1.25em;
+    color: var(--accent);
+  }
+
+  [data-theme="paper"] .md code {
+    font-family: var(--mono);
+    border: 0;
+    color: #7a3a1a;
+    font-size: 0.82em;
+    padding: 2px 5px;
+  }
+
+  [data-theme="paper"] .md pre {
+    border: 0;
+    border-radius: 8px;
+  }
+
+  [data-theme="paper"] .md pre code {
+    color: #ece6d9;
+    background: none;
+  }
+
+  [data-theme="paper"] .md table {
+    font-family: var(--sans);
+    font-size: 14px;
+  }
+
+  [data-theme="paper"] .md th,
+  [data-theme="paper"] .md td {
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    padding: 7px 14px;
+  }
+
+  [data-theme="paper"] .md th {
+    background: transparent;
+    border-bottom: 2px solid var(--fg);
+    font-weight: 600;
+  }
+
+  [data-theme="paper"] .md blockquote {
+    border-left-color: var(--accent);
+    font-style: italic;
+  }
+
+  [data-theme="paper"] .mermaid-diagram {
+    background: transparent;
+  }
+
+  [data-theme="paper"] .palette li.active {
+    color: #ffffff;
+  }
+
+  @media (max-width: 460px) {
+    [data-theme="paper"] .cell-body {
+      padding-inline: 14px;
+    }
+  }
+
+  /* ----------------------------------------------------------------- Fluent */
+  /* Microsoft 365, after Teams' dark theme: Segoe UI, an app bar, rounded cards with depth
+     instead of outlines, and Teams indigo as the accent. */
+
+  :root[data-theme="fluent"] {
+    color-scheme: dark;
+    --bg: #1f1f1f;
+    --panel: #292929;
+    --panel-2: #2f2f2f;
+    --border: #3a3a3a;
+    --border-strong: #474747;
+    --fg: #e8e8e8;
+    --fg-dim: #adadad;
+    --accent: #9a9ef7;
+    --danger: #f1707b;
+    --danger-border: #6e3a3e;
+    --hover: #3d3d3d;
+    --hover-border: transparent;
+    --primary-bg: #5b5fc7;
+    --primary-border: #5b5fc7;
+    --primary-fg: #ffffff;
+    --primary-hover: #4f52b2;
+    --bar-bg: #141414;
+    --overlay: rgba(20, 20, 20, 0.86);
+    --focus-ring: rgba(127, 133, 245, 0.35);
+    --selected-border: #7f85f5;
+    --well: #1a1a1a;
+    --code-bg: #1a1a1a;
+    --code-inline-bg: #383838;
+    --kbd-bg: #333333;
+    --tip-bg: #3b3b3b;
+    --input-focus: #7f85f5;
+    --collapsed-border: transparent;
+    --collapsed-edge: #6e72d6;
+    --collapsed-head: transparent;
+    --mono: "Cascadia Mono", Consolas, "Liberation Mono", monospace;
+    --sans: "Segoe UI", Inter, system-ui, sans-serif;
+  }
+
+  [data-theme="fluent"] body,
+  [data-theme="fluent"] button,
+  [data-theme="fluent"] .search input,
+  [data-theme="fluent"] kbd,
+  [data-theme="fluent"] .md {
+    font-family: var(--sans);
+  }
+
+  [data-theme="fluent"] button {
+    font-size: 13px;
+    background: #333333;
+    border-color: transparent;
+    border-radius: 6px;
+    padding-inline: 11px;
+  }
+
+  [data-theme="fluent"] button.primary {
+    font-weight: 600;
+  }
+
+  [data-theme="fluent"] .cell-head button:not([data-flash="on"]) {
+    background: transparent;
+  }
+
+  [data-theme="fluent"] .cell-head button:not([data-flash="on"]):hover:not(:disabled) {
+    background: #383838;
+  }
+
+  [data-theme="fluent"] .app:not([data-wide="on"]) {
+    max-width: 1040px;
+  }
+
+  /* A full-width app bar. The colour reaches the window edges by a clipped shadow rather than
+     negative margins, which would add a horizontal scrollbar wherever the vertical one is shown. */
+  [data-theme="fluent"] header.bar {
+    border-bottom: 0;
+    box-shadow: 0 0 0 100vmax var(--bar-bg);
+    clip-path: inset(0 -100vmax);
+    backdrop-filter: none;
+    margin-bottom: 20px;
+  }
+
+  [data-theme="fluent"] .title {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    font-weight: 600;
+    font-size: 15px;
+    letter-spacing: 0;
+  }
+
+  [data-theme="fluent"] .title::before {
+    content: "md";
+    display: inline-grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 6px;
+    background: linear-gradient(135deg, #7f85f5, #5b5fc7);
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  [data-theme="fluent"] .search input {
+    font-size: 13px;
+    background: #2b2b2b;
+    border: 1px solid #2b2b2b;
+    border-bottom: 2px solid #5c5c5c;
+    border-radius: 6px;
+    padding: 6px 12px;
+  }
+
+  [data-theme="fluent"] .search input:focus {
+    border-bottom-color: var(--input-focus);
+  }
+
+  [data-theme="fluent"] kbd {
+    border: 0;
+    border-radius: 4px;
+    padding: 1px 5px;
+    color: #d0d0d0;
+  }
+
+  [data-theme="fluent"] .cell {
+    border: 0;
+    border-radius: 8px;
+    box-shadow: 0 1.6px 3.6px rgba(0, 0, 0, 0.32), 0 0.3px 0.9px rgba(0, 0, 0, 0.28);
+    margin-bottom: 14px;
+  }
+
+  [data-theme="fluent"] .cell.selected,
+  [data-theme="fluent"] .cell.editing {
+    box-shadow: 0 0 0 2px var(--selected-border), 0 6px 14px rgba(0, 0, 0, 0.4);
+  }
+
+  [data-theme="fluent"] .cell.collapsed:not(.selected) {
+    box-shadow: inset 3px 0 0 var(--collapsed-edge), 0 1.6px 3.6px rgba(0, 0, 0, 0.32);
+  }
+
+  [data-theme="fluent"] .cell-head {
+    background: transparent;
+    border-bottom-color: #333333;
+    padding: 8px 12px;
+  }
+
+  [data-theme="fluent"] .cell-index {
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 600;
+    color: #ffffff;
+    background: #3d3e78;
+    border-radius: 999px;
+    padding: 1px 8px;
+    min-width: 0;
+    margin-right: 6px;
+  }
+
+  [data-theme="fluent"] .stamp,
+  [data-theme="fluent"] .cell-meta {
+    font-family: var(--sans);
+    font-size: 12px;
+  }
+
+  [data-theme="fluent"] .cell-body {
+    padding: 4px 18px;
+  }
+
+  [data-theme="fluent"] .md {
+    line-height: 1.6;
+  }
+
+  [data-theme="fluent"] .md h1 {
+    font-size: 1.6em;
+    font-weight: 600;
+    border-bottom: 0;
+  }
+
+  [data-theme="fluent"] .md h2 {
+    font-size: 1.2em;
+    font-weight: 600;
+  }
+
+  [data-theme="fluent"] .md code {
+    font-family: var(--mono);
+    border: 0;
+    color: #f0c5ff;
+  }
+
+  [data-theme="fluent"] .md pre {
+    border-color: #333333;
+    border-radius: 6px;
+  }
+
+  [data-theme="fluent"] .md pre code {
+    color: inherit;
+  }
+
+  [data-theme="fluent"] .md table {
+    width: max-content;
+    max-width: 100%;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+  }
+
+  [data-theme="fluent"] .md th,
+  [data-theme="fluent"] .md td {
+    border: 0;
+    border-bottom: 1px solid #383838;
+    padding: 8px 14px;
+  }
+
+  [data-theme="fluent"] .md th {
+    background: #333333;
+    font-weight: 600;
+  }
+
+  [data-theme="fluent"] .md tr:nth-child(even) td {
+    background: #2d2d2d;
+  }
+
+  [data-theme="fluent"] .md li.task input {
+    accent-color: #7f85f5;
+  }
+
+  [data-theme="fluent"] .mermaid-diagram {
+    background: #f5f5f5;
+    border-radius: 6px;
+  }
+
+  @media (max-width: 460px) {
+    [data-theme="fluent"] .cell-body {
+      padding-inline: 12px;
+    }
+  }
+}

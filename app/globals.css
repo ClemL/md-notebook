@@ -8,6 +8,33 @@
   --fg-dim: #8b97a8;
   --accent: #7cc4ff;
   --danger: #ff7b72;
+  --danger-border: #6b3430;
+  --hover: #232a34;
+  --hover-border: #4a5564;
+  --primary-bg: #1d3a52;
+  --primary-border: #2f5e82;
+  --primary-fg: #cfe8ff;
+  --primary-hover: #24496a;
+  --bar-bg: rgba(15, 17, 21, 0.94);
+  --overlay: rgba(15, 17, 21, 0.82);
+  --focus-ring: rgba(124, 196, 255, 0.12);
+  --selected-border: #3f5f7d;
+  /* Recessed surfaces: inputs, raw view, image frames. Code blocks have their own, since the
+     syntax colours are github-dark's and need a dark ground in every theme. */
+  --well: #0c0f14;
+  --code-bg: #0c0f14;
+  --code-inline-bg: #202632;
+  --kbd-bg: #1b2028;
+  --tip-bg: #0b0e13;
+  --input-focus: #4a6b8a;
+  --flash-bg: #16351f;
+  --flash-border: #2f7a48;
+  --flash-fg: #8ce0a6;
+  --flash-hover-bg: #1c4227;
+  --flash-hover-border: #3e9a5c;
+  --collapsed-border: #3a4350;
+  --collapsed-edge: #6b7686;
+  --collapsed-head: #191f27;
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Cascadia Mono",
     "Liberation Mono", monospace;
 }
@@ -41,8 +68,8 @@ button {
 }
 
 button:hover:not(:disabled) {
-  background: #232a34;
-  border-color: #4a5564;
+  background: var(--hover);
+  border-color: var(--hover-border);
 }
 
 button:disabled {
@@ -51,18 +78,18 @@ button:disabled {
 }
 
 button.primary {
-  background: #1d3a52;
-  border-color: #2f5e82;
-  color: #cfe8ff;
+  background: var(--primary-bg);
+  border-color: var(--primary-border);
+  color: var(--primary-fg);
 }
 
 button.primary:hover:not(:disabled) {
-  background: #24496a;
+  background: var(--primary-hover);
 }
 
 button.danger:hover:not(:disabled) {
   color: var(--danger);
-  border-color: #6b3430;
+  border-color: var(--danger-border);
 }
 
 a {
@@ -92,7 +119,7 @@ header.bar {
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
-  background: rgba(15, 17, 21, 0.94);
+  background: var(--bar-bg);
   backdrop-filter: blur(6px);
   border-bottom: 1px solid var(--border);
   padding-block: 10px;
@@ -149,7 +176,7 @@ header.bar {
 
 .cell.editing {
   border-color: var(--border-strong);
-  box-shadow: 0 0 0 1px rgba(124, 196, 255, 0.12);
+  box-shadow: 0 0 0 1px var(--focus-ring);
 }
 
 .cell-head {
@@ -257,7 +284,7 @@ textarea.editor {
 }
 
 .md code {
-  background: #202632;
+  background: var(--code-inline-bg);
   border: 1px solid var(--border);
   border-radius: 3px;
   padding: 1px 4px;
@@ -265,7 +292,7 @@ textarea.editor {
 }
 
 .md pre {
-  background: #0c0f14;
+  background: var(--code-bg);
   border: 1px solid var(--border);
   border-radius: 5px;
   padding: 12px;
@@ -339,7 +366,7 @@ textarea.editor {
   align-items: center;
   gap: 8px;
   white-space: nowrap;
-  background: #0b0e13;
+  background: var(--tip-bg);
   border: 1px solid var(--border-strong);
   border-radius: 4px;
   padding: 4px 8px;
@@ -376,7 +403,7 @@ kbd {
   font-family: var(--mono);
   font-size: 10px;
   color: var(--fg-dim);
-  background: #1b2028;
+  background: var(--kbd-bg);
   border: 1px solid var(--border-strong);
   border-bottom-width: 2px;
   border-radius: 3px;
@@ -405,7 +432,7 @@ kbd {
   font-family: var(--mono);
   font-size: 12px;
   color: var(--fg);
-  background: #0c0f14;
+  background: var(--well);
   border: 1px solid var(--border-strong);
   border-radius: 4px;
   padding: 5px 8px;
@@ -413,7 +440,7 @@ kbd {
 }
 
 .search input:focus {
-  border-color: #4a6b8a;
+  border-color: var(--input-focus);
 }
 
 .search .count {
@@ -474,7 +501,7 @@ kbd {
 
 .menu button:hover,
 .menu label:hover {
-  background: #232a34;
+  background: var(--hover);
 }
 
 .menu hr {
@@ -508,7 +535,7 @@ kbd {
   justify-content: center;
   border: 2px dashed var(--accent);
   border-radius: 8px;
-  background: rgba(15, 17, 21, 0.82);
+  background: var(--overlay);
   color: var(--accent);
   font-size: 14px;
   pointer-events: none;
@@ -517,7 +544,7 @@ kbd {
 /* ---------- cell extras ---------- */
 
 .cell.selected {
-  border-color: #3f5f7d;
+  border-color: var(--selected-border);
   box-shadow: inset 3px 0 0 var(--accent);
 }
 
@@ -538,7 +565,7 @@ kbd {
   position: absolute;
   inset: auto 0 0 0;
   height: 90px;
-  background: linear-gradient(rgba(22, 26, 33, 0), var(--panel));
+  background: linear-gradient(transparent, var(--panel));
   pointer-events: none;
 }
 
@@ -615,7 +642,7 @@ button.expand.collapse {
 pre.raw {
   margin: 12px 0;
   padding: 12px;
-  background: #0c0f14;
+  background: var(--well);
   border: 1px solid var(--border);
   border-radius: 5px;
   overflow-x: auto;
@@ -635,7 +662,7 @@ button.toast-action {
   font-size: 11px;
   padding: 3px 9px;
   color: var(--accent);
-  border-color: #2f5e82;
+  border-color: var(--primary-border);
 }
 
 .menu-label {
@@ -650,14 +677,14 @@ button.toast-action {
 /* ---------- copy / export feedback ---------- */
 
 button[data-flash="on"] {
-  background: #16351f;
-  border-color: #2f7a48;
-  color: #8ce0a6;
+  background: var(--flash-bg);
+  border-color: var(--flash-border);
+  color: var(--flash-fg);
 }
 
 button[data-flash="on"]:hover:not(:disabled) {
-  background: #1c4227;
-  border-color: #3e9a5c;
+  background: var(--flash-hover-bg);
+  border-color: var(--flash-hover-border);
 }
 
 /* ---------- image entries ---------- */
@@ -681,7 +708,7 @@ button.thumb {
   border: 1px solid var(--border-strong);
   border-radius: 5px;
   overflow: hidden;
-  background: #0c0f14;
+  background: var(--well);
   cursor: zoom-in;
   max-width: 100%;
 }
@@ -744,12 +771,12 @@ button.collapse-toggle {
 }
 
 .cell.collapsed {
-  border-color: #3a4350;
-  box-shadow: inset 3px 0 0 #6b7686;
+  border-color: var(--collapsed-border);
+  box-shadow: inset 3px 0 0 var(--collapsed-edge);
 }
 
 .cell.collapsed .cell-head {
-  background: #191f27;
+  background: var(--collapsed-head);
 }
 
 .collapsed-chip {
@@ -780,7 +807,7 @@ button.collapse-toggle {
   position: absolute;
   inset: auto 0 0 0;
   height: 1.6em;
-  background: linear-gradient(rgba(22, 26, 33, 0), var(--panel));
+  background: linear-gradient(transparent, var(--panel));
   pointer-events: none;
 }
 
@@ -1272,6 +1299,12 @@ button.swatch.on {
   border: 1px solid var(--border);
 }
 
+.menu .menu-row .view-group button.on {
+  border-color: var(--accent);
+  background: var(--hover);
+  color: var(--fg);
+}
+
 /* ---------- mermaid diagrams ---------- */
 
 /* Drawn with Mermaid's light theme on a white card: reads like a pasted image here, and prints
@@ -1425,7 +1458,7 @@ button.tools-toggle[aria-pressed="true"] {
 }
 
 .palette li.active {
-  background: #24496a;
+  background: var(--primary-hover);
 }
 
 .palette li[aria-disabled="true"] {
