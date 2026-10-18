@@ -186,17 +186,32 @@ test("search filters entries and scopes copy and export", async ({ page }) => {
   await addEntry(page, "pharmaforce daily feed");
   await addEntry(page, "optum weekly reconciliation");
 
+  // Search runs through the command palette: Enter on what was typed filters the notebook.
   await page.keyboard.press("Control+k");
   await page.keyboard.type("optum");
+  await page.keyboard.press("Enter");
   await expect(page.locator("section.cell")).toHaveCount(2);
-  await expect(page.locator(".search .count")).toHaveText("2/3");
+  await expect(page.locator(".omnibox .count")).toHaveText("2/3");
+  await expect(page.locator(".omnibox-text")).toHaveText("optum");
 
   await page.getByRole("button", { name: /Copy the filtered entries/ }).click();
   const copied = await page.evaluate(() => navigator.clipboard.readText());
   expect(copied).toContain("optum sftp rotation");
   expect(copied).not.toContain("pharmaforce");
 
-  await page.locator(".search input").press("Escape");
+  // Esc in command mode clears the filter.
+  await page.keyboard.press("Escape");
+  await expect(page.locator("section.cell")).toHaveCount(3);
+
+  // Ctrl+K reopens the palette on the current filter, to refine it; ✕ clears it.
+  await page.keyboard.press("Control+k");
+  await page.keyboard.type("weekly");
+  await page.keyboard.press("Enter");
+  await expect(page.locator("section.cell")).toHaveCount(1);
+  await page.keyboard.press("/");
+  await expect(page.getByRole("dialog", { name: "Command palette" }).getByRole("textbox")).toHaveValue("weekly");
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: /Clear the search filter/ }).click();
   await expect(page.locator("section.cell")).toHaveCount(3);
 });
 
@@ -950,7 +965,10 @@ test.describe("touch device (foldable, phone)", () => {
 });
 
 test("templates live in their own dropdown, separate from the actions menu", async ({ page }) => {
+  // The button is an icon, not the word.
+  await expect(page.getByRole("button", { name: "Insert a template" })).toHaveText("📑");
   await page.getByRole("button", { name: "Insert a template" }).click();
+  await expect(page.getByRole("button", { name: "Meeting summary" })).toContainText("👥");
   await expect(page.getByRole("button", { name: "Meeting summary" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Table 2×2" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Delete all entries" })).toHaveCount(0);
@@ -1484,7 +1502,7 @@ test("header labels: + Paste and a checkbox emoji", async ({ page }) => {
 
 test("the search box shrinks before the header wraps", async ({ page }) => {
   const header = page.locator("header.bar");
-  const search = page.locator(".search");
+  const search = page.locator(".omnibox");
   await page.setViewportSize({ width: 1280, height: 800 });
   const wide = (await search.boundingBox())!.width;
   const oneLine = (await header.boundingBox())!.height;

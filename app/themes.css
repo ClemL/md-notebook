@@ -54,7 +54,6 @@
 
   [data-theme="paper"] body,
   [data-theme="paper"] button,
-  [data-theme="paper"] .search input,
   [data-theme="paper"] kbd {
     font-family: var(--sans);
   }
@@ -82,7 +81,8 @@
     letter-spacing: 0;
   }
 
-  [data-theme="paper"] .search input {
+  [data-theme="paper"] button.omnibox-trigger,
+  [data-theme="paper"] button.omnibox-trigger:hover:not(:disabled) {
     font-size: 13px;
     background: var(--panel);
     border-radius: 999px;
@@ -250,7 +250,6 @@
 
   [data-theme="fluent"] body,
   [data-theme="fluent"] button,
-  [data-theme="fluent"] .search input,
   [data-theme="fluent"] kbd,
   [data-theme="fluent"] .md {
     font-family: var(--sans);
@@ -312,7 +311,8 @@
     font-weight: 700;
   }
 
-  [data-theme="fluent"] .search input {
+  [data-theme="fluent"] button.omnibox-trigger,
+  [data-theme="fluent"] button.omnibox-trigger:hover:not(:disabled) {
     font-size: 13px;
     background: #2b2b2b;
     border: 1px solid #2b2b2b;
@@ -321,7 +321,8 @@
     padding: 6px 12px;
   }
 
-  [data-theme="fluent"] .search input:focus {
+  [data-theme="fluent"] button.omnibox-trigger:hover:not(:disabled),
+  [data-theme="fluent"] button.omnibox-trigger:focus-visible {
     border-bottom-color: var(--input-focus);
   }
 

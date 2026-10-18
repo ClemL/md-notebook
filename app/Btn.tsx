@@ -44,3 +44,13 @@ export function DownloadIcon() {
     </svg>
   );
 }
+
+/** The magnifier on the header's search-and-command box. */
+export function SearchIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
+      <circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M10.4 10.4L14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
+}

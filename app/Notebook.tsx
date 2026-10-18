@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Btn from "./Btn";
+import Btn, { SearchIcon } from "./Btn";
 import CellView, { type FlashAction } from "./CellView";
 import { VIEWS as IMAGE_VIEWS } from "./ImageCell";
 import Dropdown from "./Dropdown";
@@ -54,7 +54,7 @@ import {
 } from "@/lib/table";
 import { parseIpynb, partsToCells, toIpynb } from "@/lib/ipynb";
 import { blobToDataUrl, imageHtml, joinHtml, markdownToHtml, writeRichClipboard } from "@/lib/richCopy";
-import type { Command } from "@/lib/commands";
+import { entrySnippet, type Command } from "@/lib/commands";
 import { THEMES, THEME_KEY, applyTheme, isThemeId, type ThemeId } from "@/lib/theme";
 import { readClipboardSmart, statusFirstWorkItems } from "@/lib/richPaste";
 import { TEMPLATES } from "@/lib/templates";
@@ -69,6 +69,8 @@ const COLLAPSED_KEY = "md-notebook:collapsed";
 const IMAGE_VIEW_KEY = "md-notebook:imageview";
 const IMAGE_VIEW_VALUES: ImageView[] = ["thumb", "width", "original"];
 const HISTORY_LIMIT = 30;
+/** Entries listed in the palette for one search; the filter command covers the rest. */
+const PALETTE_ENTRY_LIMIT = 50;
 
 type ToastAction = { label: string; run: () => void };
 type Toast = { message: string; action?: ToastAction };
@@ -110,7 +112,8 @@ function NotebookInner() {
   const [loaded, setLoaded] = useState(false);
   const [rawIds, setRawIds] = useState<Record<string, boolean>>({});
   const [toast, setToast] = useState<Toast | null>(null);
-  const [paletteOpen, setPaletteOpen] = useState(false);
+  /** What the open command palette starts with; null while it is closed. */
+  const [paletteSeed, setPaletteSeed] = useState<string | null>(null);
   const [toolsOpen, setToolsOpen] = useState(false);
 
   const cellsRef = useRef<Cell[]>([]);
@@ -120,7 +123,6 @@ function NotebookInner() {
   const skipSaveRef = useRef(false);
   const editSnapshotRef = useRef<string | null>(null);
   const toastTimer = useRef<number | null>(null);
-  const searchRef = useRef<HTMLInputElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const undoRef = useRef<() => void>(() => {});
   const insertTopRef = useRef(false);
@@ -342,8 +344,10 @@ function NotebookInner() {
     [mutate],
   );
 
+  // The search filter is kept when the entry is in it, and cleared when it would hide the entry.
   const jumpTo = useCallback((id: string) => {
-    setQuery("");
+    const cell = cellsRef.current.find((c) => c.id === id);
+    setQuery((q) => (cell && matchesQuery(cell, q) ? q : ""));
     setSelectedId(id);
     setEditingId(null);
     requestAnimationFrame(() =>
@@ -725,7 +729,7 @@ function NotebookInner() {
 
   const print = useCallback(() => {
     setToolsOpen(false);
-    setPaletteOpen(false);
+    setPaletteSeed(null);
     // After the panel has unmounted, so it is not in the printout's layout.
     requestAnimationFrame(() => window.print());
   }, []);
@@ -892,13 +896,13 @@ function NotebookInner() {
       }
       if (mod && e.shiftKey && e.key.toLowerCase() === "p") {
         e.preventDefault();
-        setPaletteOpen(true);
+        setPaletteSeed("");
         return;
       }
+      // The search shortcuts reopen the palette on the current filter, so it can be refined.
       if (mod && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        searchRef.current?.focus();
-        searchRef.current?.select();
+        setPaletteSeed(query);
         return;
       }
       if (mod && e.key.toLowerCase() === "s") {
@@ -922,10 +926,12 @@ function NotebookInner() {
       switch (e.key) {
         case "p":
           e.preventDefault();
-          setPaletteOpen(true);
+          setPaletteSeed("");
           break;
         case "Escape":
-          setToolsOpen(false);
+          // The tools panel closes first; with it closed, the search filter is cleared.
+          if (toolsOpen) setToolsOpen(false);
+          else setQuery("");
           break;
         case "C":
           if (selectedId) {
@@ -991,7 +997,7 @@ function NotebookInner() {
           break;
         case "/":
           e.preventDefault();
-          searchRef.current?.focus();
+          setPaletteSeed(query);
           break;
         case "d": {
           const now = Date.now();
@@ -1020,11 +1026,13 @@ function NotebookInner() {
     mergeWithNext,
     move,
     newFromClipboard,
+    query,
     redo,
     remove,
     say,
     selectRelative,
     selectedId,
+    toolsOpen,
     undo,
   ]);
 
@@ -1053,7 +1061,7 @@ function NotebookInner() {
     return [
       { id: "paste", group: "New", label: "New entry from clipboard", hotkey: "Ctrl+Shift+V", run: () => void newFromClipboard() },
       { id: "new", group: "New", label: "New empty entry", hotkey: "Ctrl+Shift+Enter", run: () => appendCell("") },
-      ...TEMPLATES.map((t) => ({ id: `tpl-${t.id}`, group: "Template", label: t.label, run: () => insertTemplate(t.id) })),
+      ...TEMPLATES.map((t) => ({ id: `tpl-${t.id}`, group: "Template", icon: t.icon, label: t.label, run: () => insertTemplate(t.id) })),
       { id: "edit", group: "Entry", label: "Edit", hotkey: "Enter", disabled: !text, run: () => id && beginEdit(id) },
       {
         id: "copy",
@@ -1081,7 +1089,7 @@ function NotebookInner() {
       { id: "above", group: "Entry", label: "Insert entry above", hotkey: "a", disabled: noEntry, run: () => id && insertBefore(id) },
       { id: "below", group: "Entry", label: "Insert entry below", hotkey: "b", run: () => appendCell("", id) },
       { id: "delete", group: "Entry", label: "Delete", hotkey: "dd", disabled: noEntry, run: () => id && remove(id) },
-      { id: "search", group: "Notebook", label: "Search", hotkey: "/", run: () => searchRef.current?.focus() },
+      { id: "clear-filter", group: "Notebook", label: filtering ? `Clear the search filter “${query.trim()}”` : "Clear the search filter", hotkey: "Esc", disabled: !filtering, run: () => setQuery("") },
       { id: "copy-all", group: "Notebook", label: "Copy all as markdown", hotkey: "Ctrl+Alt+C", run: () => void copyAll() },
       { id: "copy-all-rich", group: "Notebook", label: "Copy all as rich text", run: copyAllRich },
       { id: "export-md", group: "Notebook", label: "Export as .md", hotkey: "Ctrl+S", run: exportAll },
@@ -1143,8 +1151,36 @@ function NotebookInner() {
     richPaste,
     insertTop,
     clearAll,
+    filtering,
+    query,
     say,
   ]);
+
+  // The palette's second half: the entries matching what was typed, led by a command that filters
+  // the notebook down to them, which scopes Copy, Export and Print to that set.
+  const searchEntries = useCallback(
+    (q: string): Command[] => {
+      const term = q.trim();
+      const hits = cells.flatMap((c, i) => (matchesQuery(c, term) ? [{ c, i }] : []));
+      if (!hits.length) return [];
+      return [
+        {
+          id: "filter",
+          group: "Search",
+          label: `Show only the ${hits.length} ${hits.length === 1 ? "entry" : "entries"} matching “${term}”`,
+          run: () => setQuery(term),
+        },
+        ...hits.slice(0, PALETTE_ENTRY_LIMIT).map(({ c, i }) => ({
+          id: `entry-${c.id}`,
+          group: `[${i + 1}]`,
+          icon: isImageCell(c) ? "🖼️" : undefined,
+          label: entrySnippet(c, term),
+          run: () => jumpTo(c.id),
+        })),
+      ];
+    },
+    [cells, jumpTo],
+  );
 
   /* ----------------------------------------------------------------- view */
 
@@ -1180,25 +1216,30 @@ function NotebookInner() {
           {allCollapsed ? "▸ All" : "▾ All"}
         </Btn>
 
-        <span className="search">
-          <input
-            ref={searchRef}
-            type="search"
-            value={query}
-            placeholder="Search entries…  (Ctrl+K)"
-            aria-label="Search entries"
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Escape") {
-                setQuery("");
-                e.currentTarget.blur();
-              }
-            }}
-          />
-          {filtering && (
-            <span className="count">
-              {visible.length}/{cells.length}
+        {/* The palette is the main control: it searches entries and runs every command. */}
+        <span className="omnibox">
+          <Btn
+            className="omnibox-trigger"
+            tip={filtering ? `Filtered to “${query.trim()}” — change the search or run a command` : "Search entries or run a command"}
+            hotkey="Ctrl+K"
+            onClick={() => setPaletteSeed(query)}
+          >
+            <SearchIcon />
+            <span className={filtering ? "omnibox-text" : "omnibox-text omnibox-placeholder"}>
+              {filtering ? query.trim() : "Search or run a command…"}
             </span>
+            {filtering ? (
+              <span className="count">
+                {visible.length}/{cells.length}
+              </span>
+            ) : (
+              <kbd>Ctrl+K</kbd>
+            )}
+          </Btn>
+          {filtering && (
+            <Btn className="omnibox-clear" tip="Clear the search filter" hotkey="Esc" onClick={() => setQuery("")}>
+              ✕
+            </Btn>
           )}
         </span>
 
@@ -1214,27 +1255,23 @@ function NotebookInner() {
           Copy{filtering ? ` (${visible.length})` : " All"}
         </Btn>
 
-        <Btn
-          className="tools-toggle"
-          tip="Tools: table as CSV, JSON or SQL; print; Jupyter export"
-          onClick={() => setToolsOpen((v) => !v)}
-          aria-pressed={toolsOpen}
-        >
-          Tools
-        </Btn>
-
-        <Dropdown label="Templates" tip="Insert a template" align="right">
+        <Dropdown label={<span aria-hidden="true">📑</span>} tip="Insert a template" align="right">
           <span className="menu-label">Insert template</span>
           {TEMPLATES.map((t) => (
             <button key={t.id} onClick={() => insertTemplate(t.id)}>
-              {t.label}
+              <span>
+                <span className="menu-icon" aria-hidden="true">
+                  {t.icon}
+                </span>
+                {t.label}
+              </span>
             </button>
           ))}
         </Dropdown>
 
         <Dropdown label="⋯" tip="More actions" align="right">
-          <button onClick={() => setPaletteOpen(true)}>
-            Command palette… <kbd>p</kbd>
+          <button title="The selected table as TSV, CSV, JSON or SQL; print; Jupyter export" onClick={() => setToolsOpen(true)}>
+            Tools…
           </button>
           <button
             title={filtering ? "Download the filtered entries as .md" : "Download every entry as one .md file"}
@@ -1354,8 +1391,8 @@ function NotebookInner() {
             Entries render on blur. <kbd>Esc</kbd>/<kbd>Ctrl+Enter</kbd> commits · <kbd>j</kbd>
             <kbd>k</kbd> move · <kbd>Enter</kbd> edit · <kbd>a</kbd>/<kbd>b</kbd> insert ·{" "}
             <kbd>dd</kbd> delete · <kbd>r</kbd> raw · <kbd>Shift+M</kbd> merge ·{" "}
-            <kbd>Ctrl+Shift+-</kbd> split · <kbd>/</kbd> search · <kbd>p</kbd> commands. Stored in
-            this browser only.
+            <kbd>Ctrl+Shift+-</kbd> split · <kbd>p</kbd>/<kbd>Ctrl+K</kbd> search and commands. Stored
+            in this browser only.
           </span>
           <button className="hint-close" onClick={() => setShowHint(false)} aria-label="Hide the shortcut hints">
             ✕
@@ -1457,7 +1494,14 @@ function NotebookInner() {
           onClose={() => setToolsOpen(false)}
         />
       )}
-      {paletteOpen && <CommandPalette commands={commands} onClose={() => setPaletteOpen(false)} />}
+      {paletteSeed !== null && (
+        <CommandPalette
+          commands={commands}
+          search={searchEntries}
+          initialQuery={paletteSeed}
+          onClose={() => setPaletteSeed(null)}
+        />
+      )}
 
       {dragging && <div className="dropzone">Drop .md, .json, .ipynb or .csv to import</div>}
       {toast && (
