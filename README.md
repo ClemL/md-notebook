@@ -90,8 +90,9 @@ the codebase, unused, so the feature can be wired back in.
   then back to tasks. **Checkbox All** only adds tasks, to every entry.
 - **Timestamps** on every entry, and long entries are clamped with *Show more* so one big paste does
   not bury the rest.
-- **Templates** live in their own dropdown: meeting summary (dated, with Decisions and Todos
-  sections), daily scratch, 2×2 and 3×3 table skeletons, code snippet, link list.
+- **Templates** live in their own dropdown, the 📑 button: 👥 meeting summary (dated, with
+  Decisions and Todos sections), 🗓️ daily scratch, ▦ 2×2 and 3×3 table skeletons, 💻 code snippet,
+  🔗 link list. They are in the command palette too, with the same icons.
 - **Tabular paste becomes a table.** Markdown tables render on their own; what does not is text that
   only looks tabular. A tab-separated grid (Excel, a query result) is converted to a markdown table
   on paste, and pipe rows written without the `| --- |` delimiter row GFM requires have it inserted.
@@ -126,8 +127,13 @@ the codebase, unused, so the feature can be wired back in.
 
 ### Notebook
 
-- **Search** (`Ctrl+K` or `/`) filters entries by substring; every term must match. While a filter is
-  active, **Copy** and **Export** act on the filtered set and say so.
+- **Search** runs through the command palette (`Ctrl+K`, `/`, or the box in the header). As you type,
+  the entries that match are listed under the commands — every term must match, as a substring —
+  each with its number and the line that matched; Enter or a click jumps to one. The first result,
+  **Show only the n entries matching …**, filters the notebook instead. While a filter is active
+  the header box shows it with a count, **Copy** and **Export** act on the filtered set and say so,
+  and `Esc` in command mode or the box's ✕ clears it. `Ctrl+K` and `/` reopen the palette on the
+  current filter, so it can be refined.
 - **Undo / redo** (`Ctrl+Z`, `Ctrl+Shift+Z`) covers deletes, reorders, splits, merges, imports,
   checkbox conversions and *Delete all* — 30 steps deep. Typing collapses into one undo step per
   editing session, and destructive actions put an **Undo** button in the toast.
@@ -145,11 +151,12 @@ the codebase, unused, so the feature can be wired back in.
   stay editable on the way back. Importing a notebook from elsewhere keeps markdown cells as they
   are, fences code and raw cells (in the notebook's language), puts text output in a `text` fence
   under its code, and turns image outputs and attachments into image entries.
-- **Command palette** (`p` in command mode, `Ctrl+Shift+P` anywhere, or the ⋯ menu): every action
-  in one filterable list, with its shortcut beside it, so none has to be memorized. Type to filter
-  (every word must match, in the label or its group), ↑/↓ and Enter to run. Entry and table
+- **Command palette**, the main control: the box in the header, `p` or `/` in command mode, or
+  `Ctrl+K` / `Ctrl+Shift+P` anywhere. Every action in one filterable list, with its shortcut beside
+  it, so none has to be memorized, followed by the matching entries (see **Search**). Type to
+  filter (every word must match, in the label or its group), ↑/↓ and Enter to run. Entry and table
   commands act on the selected entry and are greyed out when it does not fit them.
-- **Tools panel** (header **Tools**): the occasional exports, kept out of the toolbars. For the
+- **Tools panel** (**Tools…** in the ⋯ menu, or `tools` in the palette): the occasional exports, kept out of the toolbars. For the
   selected table entry: **Copy TSV**, **Copy CSV** and **.csv ⬇**, **Copy JSON** and **.json ⬇**,
   and T-SQL. **Copy INSERT** writes a `CREATE TABLE` with `NVARCHAR(MAX)` columns and `INSERT …
   VALUES` in batches of 1000 rows, SQL Server's limit, into the table named in the panel (default
@@ -187,8 +194,10 @@ the codebase, unused, so the feature can be wired back in.
   table entry (hover for the spelled-out form), and pixel dimensions and file size for an image.
 - **▾ All / ▸ All** in the header folds every entry at once, or unfolds them when all are already
   folded.
-- **The header** is titled **mdnb** to leave room for search. **The search box** takes the free width in the header, up to 480px, and gives it up first as the
-  window narrows — down to 120px — before any button wraps to a second line.
+- **The header** is titled **mdnb** to leave room for search. **The search-and-command box** takes
+  the free width in the header, up to 480px, and gives it up first as the window narrows — down to
+  120px — before any button wraps to a second line. It opens the command palette rather than taking
+  typing itself.
 - **The shortcut hint line** can be dismissed with its ✕ and brought back from the ⋯ menu.
 - **Collapse an entry** with the ▾ button to leave two lines of it visible; the entry keeps a
   marked edge, a `+n lines` chip, and its collapsed state across reloads. Double-click a collapsed
@@ -215,14 +224,14 @@ Every button's tooltip names its shortcut. Outside a text box the notebook is in
 | `Shift+M` | Merge the selected entry with the one below |
 | `Ctrl+Shift+-` | Split the entry being edited at the caret |
 | `Alt+↑` / `Alt+↓` | Move the entry up / down |
-| `/` or `Ctrl+K` | Search |
+| `/` or `Ctrl+K` | Search: the command palette, on the current filter |
 | `Ctrl+Shift+V` | New entry from the clipboard |
 | `Ctrl+Shift+Enter` | New empty entry |
 | `Ctrl+Z` / `Ctrl+Shift+Z` | Undo / redo |
 | `Ctrl+S` | Export all as markdown |
 | `p` / `Ctrl+Shift+P` | Command palette |
 | `Shift+C` | Copy the selected entry as rich text |
-| `Esc` | Close the tools panel |
+| `Esc` | Close the tools panel; with it closed, clear the search filter |
 | `Ctrl+Alt+C` | Copy all |
 
 ## Marking up an image

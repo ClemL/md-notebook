@@ -414,41 +414,68 @@ kbd {
 /* ---------- search ---------- */
 
 /*
- * The search box takes the free space in the header, up to 480px. Its basis is its minimum, so
- * as the window narrows it gives up width first, down to 120px, and only then do the buttons
- * after it wrap to a second line.
+ * The search-and-command box takes the free space in the header, up to 480px. Its basis is its
+ * minimum, so as the window narrows it gives up width first, down to 120px, and only then do the
+ * buttons after it wrap to a second line. It is a button drawn as a text field: it opens the
+ * command palette, which is where the typing happens.
  */
-.search {
-  position: relative;
+.omnibox {
   display: inline-flex;
   align-items: center;
+  gap: 4px;
   min-width: 120px;
   max-width: 480px;
   flex: 100 1 120px;
 }
 
-.search input {
-  width: 100%;
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--fg);
-  background: var(--well);
-  border: 1px solid var(--border-strong);
-  border-radius: 4px;
-  padding: 5px 8px;
-  outline: none;
+.omnibox > .tipwrap:first-child {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
-.search input:focus {
+button.omnibox-trigger {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  min-width: 0;
+  text-align: left;
+  color: var(--fg-dim);
+  background: var(--well);
+  border-color: var(--border-strong);
+  padding: 5px 8px;
+}
+
+button.omnibox-trigger:hover:not(:disabled) {
+  background: var(--well);
   border-color: var(--input-focus);
 }
 
-.search .count {
-  position: absolute;
-  right: 8px;
-  font-size: 11px;
+.omnibox-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--fg);
+}
+
+.omnibox-text.omnibox-placeholder {
   color: var(--fg-dim);
-  pointer-events: none;
+}
+
+.omnibox-trigger svg,
+.omnibox-trigger kbd,
+.omnibox-trigger .count {
+  flex: none;
+}
+
+.omnibox-trigger .count {
+  font-size: 11px;
+}
+
+button.omnibox-clear {
+  padding-inline: 7px;
+  color: var(--fg-dim);
 }
 
 /* ---------- menu ---------- */
@@ -663,6 +690,14 @@ button.toast-action {
   padding: 3px 9px;
   color: var(--accent);
   border-color: var(--primary-border);
+}
+
+/* Fixed width, so template labels line up whatever the glyph. */
+.menu-icon {
+  display: inline-block;
+  width: 1.5em;
+  margin-right: 6px;
+  text-align: center;
 }
 
 .menu-label {
@@ -926,9 +961,8 @@ button.collapse-toggle {
     min-width: 38px;
   }
 
-  .search input {
-    min-height: 38px;
-    font-size: 16px;
+  .omnibox-trigger kbd {
+    display: none;
   }
 
   .menu button,
@@ -992,7 +1026,7 @@ button.collapse-toggle {
     gap: 6px;
   }
 
-  .search {
+  .omnibox {
     flex: 1 1 100%;
     min-width: 0;
     max-width: none;
@@ -1398,11 +1432,6 @@ button.swatch.on {
   padding: 5px 8px;
 }
 
-button.tools-toggle[aria-pressed="true"] {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
 /* ---------- command palette ---------- */
 
 .palette-backdrop {
@@ -1474,6 +1503,15 @@ button.tools-toggle[aria-pressed="true"] {
 
 .palette-label {
   flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.palette-icon {
+  display: inline-block;
+  width: 1.5em;
+  margin-right: 4px;
+  text-align: center;
 }
 
 .palette li.palette-empty {

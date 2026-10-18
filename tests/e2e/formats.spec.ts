@@ -76,6 +76,9 @@ test("a pasted JSON array becomes a table", async ({ page }) => {
 
 test("the tools panel copies the selected table as CSV, JSON and SQL", async ({ page }) => {
   await addEntry(page, TABLE);
+  // Tools has no header button of its own; it lives in the ⋯ menu.
+  await expect(page.locator("header.bar").getByRole("button", { name: /^Tools/ })).toHaveCount(0);
+  await page.getByRole("button", { name: "More actions" }).click();
   await page.getByRole("button", { name: /^Tools/ }).click();
   const panel = page.getByRole("complementary", { name: "Tools" });
   await expect(panel).toContainText("2 rows × 2 columns");
@@ -124,6 +127,35 @@ test("the command palette filters and runs actions", async ({ page }) => {
   await page.keyboard.press("Control+Shift+P");
   await page.keyboard.press("Escape");
   await expect(palette).toHaveCount(0);
+});
+
+test("the palette searches entries, jumps to one, and inserts templates", async ({ page }) => {
+  await addEntry(page, "# Vendors\n- Optum SFTP rotation");
+  await addEntry(page, "pharmaforce daily feed");
+  await addEntry(page, "optum weekly reconciliation");
+
+  // The header's search box is the palette's trigger, not a text field of its own.
+  await expect(page.locator("header.bar input")).toHaveCount(0);
+  await page.getByRole("button", { name: /Search entries or run a command/ }).click();
+  const palette = page.getByRole("dialog", { name: "Command palette" });
+  await expect(palette.getByRole("textbox")).toBeFocused();
+
+  // Commands first, then the filter, then one line per matching entry, showing the matching line.
+  await page.keyboard.type("optum");
+  const options = palette.getByRole("option");
+  await expect(options).toHaveText([/Show only the 2 entries matching “optum”/, /\[1\].*Optum SFTP rotation/, /\[3\].*optum weekly/]);
+
+  await options.filter({ hasText: "optum weekly" }).click();
+  await expect(palette).toHaveCount(0);
+  await expect(page.locator("section.cell").nth(2)).toHaveClass(/selected/);
+  await expect(page.locator("section.cell")).toHaveCount(3);
+
+  // Templates show their icon; the label is still what is matched.
+  await page.keyboard.press("p");
+  await page.keyboard.type("meeting");
+  await expect(options.first()).toContainText("👥");
+  await page.keyboard.press("Enter");
+  await expect(page.locator("textarea.editor")).toHaveValue(/^# Meeting — \d{4}-\d{2}-\d{2}/);
 });
 
 test("an .ipynb export imports back with its images", async ({ page }) => {

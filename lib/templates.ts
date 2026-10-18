@@ -5,6 +5,8 @@ import { blankTable } from "./table";
 export type Template = {
   id: string;
   label: string;
+  /** Shown before the label in the menu and the command palette. */
+  icon: string;
   build: (now?: Date) => string;
 };
 
@@ -17,6 +19,7 @@ export const TEMPLATES: Template[] = [
   {
     id: "meeting",
     label: "Meeting summary",
+    icon: "👥",
     build: (now = new Date()) =>
       [
         `# Meeting — ${isoDate(now)}`,
@@ -37,26 +40,31 @@ export const TEMPLATES: Template[] = [
   {
     id: "scratch",
     label: "Daily scratch",
+    icon: "🗓️",
     build: (now = new Date()) => [`## ${isoDate(now)}`, "", "* [ ] ", ""].join("\n"),
   },
   {
     id: "table2",
     label: "Table 2×2",
+    icon: "▦",
     build: () => blankTable(2, 2),
   },
   {
     id: "table3",
     label: "Table 3×3",
+    icon: "▦",
     build: () => blankTable(3, 3),
   },
   {
     id: "snippet",
     label: "Code snippet",
+    icon: "💻",
     build: () => ["```powershell", "", "```", ""].join("\n"),
   },
   {
     id: "links",
     label: "Link list",
+    icon: "🔗",
     build: (now = new Date()) => [`## Links — ${isoDate(now)}`, "", "- [](https://)", ""].join("\n"),
   },
 ];
