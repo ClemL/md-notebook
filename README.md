@@ -166,6 +166,20 @@ the codebase, unused, so the feature can be wired back in.
   just a blank line.
 - **New entries go to the top** (⋯ menu) puts new, pasted, templated and imported entries above the
   existing ones instead of below. `a` and `b` still insert relative to the selected entry.
+- **Theme** (⋯ menu, or `theme` in the command palette): three looks, remembered per browser.
+  - **Terminal**, the original: dark, monospace throughout, every toolbar visible.
+  - **Paper**: light and built for reading. Serif prose on warm paper, sans-serif controls, cards
+    with shadows instead of outlines, tables ruled horizontally only. Entry toolbars stay hidden
+    until the entry is selected, edited, pointed at or focused from the keyboard; touch screens
+    and windows narrower than 821px, where the toolbar wraps, always show them. Code blocks stay
+    dark so the syntax colours still read.
+  - **Fluent**: styled after Microsoft Teams' dark theme. Segoe UI, a full-width app bar, rounded
+    cards with depth, Teams indigo for the accent, striped tables.
+
+  The theme is applied before the page first paints, so a light theme does not flash dark on
+  load. Printing ignores it and uses the black-on-white print layout. Every colour in
+  `app/globals.css` is a variable, so a new theme in `app/themes.css` is a block of variables
+  plus whatever type and shape changes it wants.
 - **Compact mode** (⋯ menu) tightens spacing and type for small screens and long notebooks.
   Timestamps stay visible.
 - **Wide mode** (⋯ menu) lifts the 980px reading width so entries span the browser window.
