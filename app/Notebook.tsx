@@ -6,6 +6,7 @@ import CellView, { type FlashAction } from "./CellView";
 import { VIEWS as IMAGE_VIEWS } from "./ImageCell";
 import Dropdown from "./Dropdown";
 import CommandPalette from "./CommandPalette";
+import Footer from "./Footer";
 import ToolsPanel from "./ToolsPanel";
 import { FlashProvider, useFlash } from "./flash";
 import {
@@ -1474,6 +1475,8 @@ function NotebookInner() {
           />
         ))
       )}
+
+      <Footer />
 
       {toolsOpen && (
         <ToolsPanel
