@@ -1,0 +1,28 @@
+2026-09-12T13:52:00Z - md-notebook launches: markdown entries that render when you click away, + Paste from the clipboard, Checkbox, Copy All and Export All
+2026-09-12T15:08:00Z - Added search, undo and redo, keyboard shortcuts named in every tooltip, rich paste converted to markdown, .md import and .json backup; a second open tab no longer overwrites the notebook
+2026-09-13T00:15:00Z - Breadcrumb trails paste onto one line; Enter continues lists; entries can be split at the caret and merged
+2026-09-13T00:44:00Z - Pasted and dropped screenshots are kept as image entries; Azure DevOps file links read as paths; the last-used copy button stays green
+2026-09-15T15:44:00Z - Fixed breadcrumb trails with long link addresses staying split across lines
+2026-09-15T23:34:00Z - New entries can go to the top; a tab-separated paste from Excel becomes a table; a text entry can no longer be merged with an image and lose it
+2026-09-21T05:32:00Z - Added Send/Receive, to hand entries to another machine with a one-time code
+2026-09-22T02:47:00Z - Bare Azure DevOps URLs paste as labeled links to pull requests, branches, files and wiki pages
+2026-09-24T01:06:00Z - Added compact mode, a dismissible shortcut hint, per-entry collapse, larger touch controls, and a static build to host anywhere
+2026-09-24T03:44:00Z - Menus stay on screen and scroll on short phone screens; templates moved to their own menu
+2026-09-27T07:24:00Z - Added image markup: a built-in annotator with boxes, arrows, lines and text, and an Excalidraw button that opens the image on excalidraw.com
+2026-09-28T07:45:00Z - Images get size views, move buttons and Merge ↓; table entries sort by column and drop columns; ▾ All folds every entry
+2026-09-28T12:42:00Z - Image size shows beside the timestamp; Edit opens the annotator inside the entry, with a Full screen option
+2026-09-29T22:24:00Z - Send/Receive is switched off for now; fixed the annotator's Text tool
+2026-10-01T11:51:00Z - Export All moved into the ⋯ menu; entries show their size; Wide mode spans the window
+2026-10-01T15:37:00Z - Pasted Azure DevOps work-item lists lead each line with the item's state
+2026-10-05T13:36:00Z - Pasted work item and wiki URLs become labeled links, through + Paste and from Edge friendly links too
+2026-10-05T20:33:00Z - Pasted CSV becomes a markdown table, with the first row as its header
+2026-10-09T12:04:00Z - Work item links are labeled Story instead of Devops
+2026-10-09T12:06:00Z - Checked tasks are struck through; each entry has a button that downloads it as .md
+2026-10-09T13:57:00Z - Added +📋, which appends an entry to the clipboard after a --- rule
+2026-10-09T20:08:00Z - Images download with their markup and can all be resized from the ⋯ menu; +📋 and ☑️ light up when used
+2026-10-13T12:29:00Z - Entry toolbars lead with Edit, Download and Copy; ☑️ cycles tasks, numbered, bullets, code and plain text
+2026-10-13T12:30:00Z - Double-clicking in the annotator drops a text label, whatever the tool
+2026-10-17T17:04:00Z - Added rich copy for Outlook and Teams, Jupyter .ipynb import and export, JSON paste as a table, a command palette, Mermaid diagrams, and a Tools panel for CSV, JSON, SQL and print
+2026-10-18T13:30:00Z - Added three themes: Terminal, Paper and Fluent
+2026-10-18T13:49:00Z - The command palette is now the header's main control and searches entries; Tools moved into the ⋯ menu and Templates is an icon
+2026-10-30T23:03:00Z - Added this changelog

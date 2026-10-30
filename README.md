@@ -198,6 +198,9 @@ the codebase, unused, so the feature can be wired back in.
   the free width in the header, up to 480px, and gives it up first as the window narrows — down to
   120px — before any button wraps to a second line. It opens the command palette rather than taking
   typing itself.
+- **The footer** at the foot of the page shows the version, when this copy was built, and the
+  newest changelog entry. Click the entry, or Tab to it and press Enter, for every entry, newest
+  first. It is left out of the printout.
 - **The shortcut hint line** can be dismissed with its ✕ and brought back from the ⋯ menu.
 - **Collapse an entry** with the ▾ button to leave two lines of it visible; the entry keeps a
   marked edge, a `+n lines` chip, and its collapsed state across reloads. Double-click a collapsed
@@ -272,6 +275,22 @@ Mermaid is about 4 MB, so it is fetched only the first time a diagram appears on
 without one never loads it. It runs with `securityLevel: "strict"`, which sanitizes labels and
 disables click handlers. A diagram that does not parse shows its first error line above the source. Single newlines render as line breaks (`remark-breaks`), which suits
 pasted lists of links. Raw HTML is **not** rendered, so pasted content cannot inject markup.
+
+## Changelog
+
+`public/updates.txt` holds one entry per line, **oldest first**, so shipping one is a one-line
+append:
+
+```text
+2026-10-30T23:03:00Z - Added this changelog
+```
+
+Each line is a UTC timestamp (`date -u +%Y-%m-%dT%H:%M:00Z`), ` - `, and the change as a plain
+sentence about what users see. Refactors, tests and tooling do not get a line. The footer fetches
+the file after the page loads, so editing it needs no code change; blank lines are skipped. A
+missing or empty file only hides the entry and its dialog: the version and build time still show.
+The static build fetches it from beside `index.html`, so a copy opened over `file://`, where the
+browser refuses the request, shows the build line alone.
 
 ## Local development
 

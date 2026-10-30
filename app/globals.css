@@ -98,12 +98,18 @@ a {
 
 /* ---------- layout ---------- */
 
+/* A column at least as tall as the window, so the footer sits at its foot however short the
+   notebook is. The footer also keeps the last entry clear of the toast. */
 .app {
   max-width: 980px;
   margin: 0 auto;
-  padding-block: 16px 96px;
+  padding-block: 16px 24px;
   padding-left: 16px;
   padding-right: 16px;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100dvh;
 }
 
 /* Wide mode drops the reading-width cap so entries span the browser window. */
@@ -1019,7 +1025,7 @@ button.collapse-toggle {
 /* The cover screen of a folded phone: keep the chrome out of the way. */
 @media (max-width: 460px) {
   .app {
-    padding-block: 10px 72px;
+    padding-block: 10px 16px;
   }
 
   .bar {
@@ -1432,9 +1438,10 @@ button.swatch.on {
   padding: 5px 8px;
 }
 
-/* ---------- command palette ---------- */
+/* ---------- command palette and dialogs ---------- */
 
-.palette-backdrop {
+.palette-backdrop,
+.modal-backdrop {
   position: fixed;
   inset: 0;
   z-index: 45;
@@ -1445,7 +1452,8 @@ button.swatch.on {
   background: rgba(8, 10, 13, 0.55);
 }
 
-.palette {
+.palette,
+.modal {
   width: min(560px, 100%);
   max-height: 70vh;
   display: flex;
@@ -1455,6 +1463,26 @@ button.swatch.on {
   border-radius: 6px;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
   overflow: hidden;
+}
+
+/* Leaves the backdrop's 12vh above and room below, so the panel never runs off a short screen. */
+.modal {
+  max-height: 76vh;
+  outline: none;
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 8px 8px 14px;
+  border-bottom: 1px solid var(--border-strong);
+}
+
+.modal-head h2 {
+  flex: 1 1 auto;
+  margin: 0;
+  font-size: 14px;
 }
 
 .palette input {
@@ -1525,6 +1553,59 @@ button.swatch.on {
   }
 }
 
+/* ---------- footer and changelog ---------- */
+
+/* Pushed to the foot of the page by .app's column layout when the notebook is short. */
+.build-info {
+  margin-top: auto;
+  padding: 18px 0 2px;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--fg-dim);
+}
+
+/* Text, not a button, to look at; every theme styles buttons, hence the extra specificity. */
+.build-info button.changelog-trigger,
+.build-info button.changelog-trigger:hover:not(:disabled) {
+  display: block;
+  width: 100%;
+  margin-top: 2px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  /* One line only: the full text is in the tooltip and the dialog. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.build-info button.changelog-trigger:hover:not(:disabled),
+.build-info button.changelog-trigger:focus-visible {
+  color: var(--fg);
+}
+
+/* A long changelog scrolls inside the dialog rather than growing it. */
+.changelog-list {
+  min-height: 0;
+  max-height: 28rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin: 0;
+  padding: 10px 14px 12px 32px;
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.changelog-list li {
+  margin-bottom: 6px;
+  overflow-wrap: anywhere;
+}
+
 /* ---------- print / save as PDF ---------- */
 
 /* What is on screen, minus the controls, in black on white: every entry at full length, the
@@ -1554,6 +1635,8 @@ button.swatch.on {
 
   .app,
   .app[data-wide="on"] {
+    display: block;
+    min-height: 0;
     max-width: none;
     padding: 0;
   }
@@ -1564,6 +1647,8 @@ button.swatch.on {
   .toast,
   .tools-panel,
   .palette-backdrop,
+  .modal-backdrop,
+  .build-info,
   .dropzone,
   button.expand,
   .codeblock .codecopy,
