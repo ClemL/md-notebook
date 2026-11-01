@@ -24,8 +24,7 @@ test("the theme is a menu setting that survives a reload", async ({ page }) => {
   await expect(group.getByRole("button", { name: "Terminal" })).toHaveAttribute("aria-pressed", "true");
   await group.getByRole("button", { name: "Paper" }).click();
   await expect(html).toHaveAttribute("data-theme", "paper");
-  // Choosing closes the menu, as the image-size row does; reopened, it marks the choice.
-  await page.getByRole("button", { name: "More actions" }).click();
+  // A display setting leaves the menu open, so several can be set in one visit.
   await expect(group.getByRole("button", { name: "Paper" })).toHaveAttribute("aria-pressed", "true");
   await page.keyboard.press("Escape");
   expect(await bodyBackground(page)).toBe("rgb(246, 243, 236)");

@@ -6,6 +6,7 @@ import CellView, { type FlashAction } from "./CellView";
 import { VIEWS as IMAGE_VIEWS } from "./ImageCell";
 import Dropdown from "./Dropdown";
 import CommandPalette from "./CommandPalette";
+import ScreenReadout from "./ScreenReadout";
 import Footer from "./Footer";
 import ToolsPanel from "./ToolsPanel";
 import { FlashProvider, useFlash } from "./flash";
@@ -57,13 +58,25 @@ import { parseIpynb, partsToCells, toIpynb } from "@/lib/ipynb";
 import { blobToDataUrl, imageHtml, joinHtml, markdownToHtml, writeRichClipboard } from "@/lib/richCopy";
 import { entrySnippet, type Command } from "@/lib/commands";
 import { THEMES, THEME_KEY, applyTheme, isThemeId, type ThemeId } from "@/lib/theme";
+import {
+  DENSITIES,
+  DENSITY_KEY,
+  LEGACY_COMPACT_KEY,
+  TEXT_SIZES,
+  TEXT_SIZE_KEY,
+  applyDensity,
+  applyTextSize,
+  isDensityId,
+  isTextSizeId,
+  type DensityId,
+  type TextSizeId,
+} from "@/lib/display";
 import { readClipboardSmart, statusFirstWorkItems } from "@/lib/richPaste";
 import { TEMPLATES } from "@/lib/templates";
 
 const SEP_KEY = "md-notebook:separators";
 const RICH_KEY = "md-notebook:richpaste";
 const TOP_KEY = "md-notebook:inserttop";
-const COMPACT_KEY = "md-notebook:compact";
 const HINT_KEY = "md-notebook:hint";
 const WIDE_KEY = "md-notebook:wide";
 const COLLAPSED_KEY = "md-notebook:collapsed";
@@ -101,7 +114,8 @@ function NotebookInner() {
   const [separators, setSeparators] = useState(true);
   const [richPaste, setRichPaste] = useState(true);
   const [insertTop, setInsertTop] = useState(false);
-  const [compact, setCompact] = useState(false);
+  const [density, setDensity] = useState<DensityId>("normal");
+  const [textSize, setTextSize] = useState<TextSizeId>("100");
   const [wide, setWide] = useState(false);
   /** The size every image was last set to from the menu; new pastes start at it too. */
   const [imageView, setImageViewDefault] = useState<ImageView>("thumb");
@@ -199,7 +213,12 @@ function NotebookInner() {
     setSeparators(localStorage.getItem(SEP_KEY) !== "0");
     setRichPaste(localStorage.getItem(RICH_KEY) !== "0");
     setInsertTop(localStorage.getItem(TOP_KEY) === "1");
-    setCompact(localStorage.getItem(COMPACT_KEY) === "1");
+    // The boot script has already applied these; state only drives the menu's controls.
+    const savedDensity = localStorage.getItem(DENSITY_KEY);
+    if (isDensityId(savedDensity)) setDensity(savedDensity);
+    else if (localStorage.getItem(LEGACY_COMPACT_KEY) === "1") setDensity("compact");
+    const savedSize = localStorage.getItem(TEXT_SIZE_KEY);
+    if (isTextSizeId(savedSize)) setTextSize(savedSize);
     setWide(localStorage.getItem(WIDE_KEY) === "1");
     setShowHint(localStorage.getItem(HINT_KEY) !== "0");
     const savedTheme = localStorage.getItem(THEME_KEY);
@@ -239,8 +258,28 @@ function NotebookInner() {
   }, [insertTop, loaded]);
 
   useEffect(() => {
-    if (loaded) localStorage.setItem(COMPACT_KEY, compact ? "1" : "0");
-  }, [compact, loaded]);
+    if (!loaded) return;
+    applyDensity(density);
+    try {
+      if (density === "normal") localStorage.removeItem(DENSITY_KEY);
+      else localStorage.setItem(DENSITY_KEY, density);
+      // The on/off Compact mode this replaced; the density key now speaks for it.
+      localStorage.removeItem(LEGACY_COMPACT_KEY);
+    } catch {
+      /* the choice lasts for this tab */
+    }
+  }, [density, loaded]);
+
+  useEffect(() => {
+    if (!loaded) return;
+    applyTextSize(textSize);
+    try {
+      if (textSize === "100") localStorage.removeItem(TEXT_SIZE_KEY);
+      else localStorage.setItem(TEXT_SIZE_KEY, textSize);
+    } catch {
+      /* the choice lasts for this tab */
+    }
+  }, [textSize, loaded]);
 
   useEffect(() => {
     if (loaded) localStorage.setItem(WIDE_KEY, wide ? "1" : "0");
@@ -1103,7 +1142,18 @@ function NotebookInner() {
       { id: "checkbox-all", group: "Notebook", label: "Checkbox all", run: checkboxAll },
       { id: "undo", group: "Notebook", label: "Undo", hotkey: "Ctrl+Z", run: undo },
       { id: "redo", group: "Notebook", label: "Redo", hotkey: "Ctrl+Shift+Z", run: redo },
-      { id: "compact", group: "View", label: `Compact mode: ${compact ? "turn off" : "turn on"}`, run: () => setCompact((v) => !v) },
+      ...DENSITIES.map((d) => ({
+        id: `density-${d.id}`,
+        group: "Density",
+        label: `${d.label}${d.id === density ? " (current)" : ""}`,
+        run: () => setDensity(d.id),
+      })),
+      ...TEXT_SIZES.map((t) => ({
+        id: `text-${t.id}`,
+        group: "Text size",
+        label: `${t.label}${t.id === textSize ? " (current)" : ""}`,
+        run: () => setTextSize(t.id),
+      })),
       { id: "wide", group: "View", label: `Wide mode: ${wide ? "turn off" : "turn on"}`, run: () => setWide((v) => !v) },
       ...THEMES.map((t) => ({
         id: `theme-${t.id}`,
@@ -1144,7 +1194,8 @@ function NotebookInner() {
     checkboxAll,
     undo,
     redo,
-    compact,
+    density,
+    textSize,
     wide,
     showHint,
     theme,
@@ -1190,7 +1241,6 @@ function NotebookInner() {
     <div
       className="app"
       data-ready={loaded ? "true" : undefined}
-      data-compact={compact ? "on" : undefined}
       data-wide={wide ? "on" : undefined}
     >
       <header className="bar">
@@ -1291,7 +1341,7 @@ function NotebookInner() {
           <button onClick={checkboxAll}>
             Checkbox All <kbd>t</kbd>
           </button>
-          <div className="menu-row" role="group" aria-label="All images">
+          <div className="menu-row" role="group" aria-label="All images" data-keep-open>
             <span>All images</span>
             <span className="view-group">
               {IMAGE_VIEWS.map((v) => (
@@ -1307,7 +1357,8 @@ function NotebookInner() {
               ))}
             </span>
           </div>
-          <div className="menu-row" role="group" aria-label="Theme">
+          {/* Display settings leave the menu open, so several can be set in one visit. */}
+          <div className="menu-row stacked" role="group" aria-label="Theme" data-keep-open>
             <span>Theme</span>
             <span className="view-group">
               {THEMES.map((t) => (
@@ -1317,6 +1368,38 @@ function NotebookInner() {
                   aria-pressed={theme === t.id}
                   className={theme === t.id ? "on" : undefined}
                   onClick={() => setTheme(t.id)}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </span>
+          </div>
+          <div className="menu-row" role="group" aria-label="Density" data-keep-open>
+            <span>Density</span>
+            <span className="view-group">
+              {DENSITIES.map((d) => (
+                <button
+                  key={d.id}
+                  title={d.tip}
+                  aria-pressed={density === d.id}
+                  className={density === d.id ? "on" : undefined}
+                  onClick={() => setDensity(d.id)}
+                >
+                  {d.label}
+                </button>
+              ))}
+            </span>
+          </div>
+          <div className="menu-row" role="group" aria-label="Text size" data-keep-open>
+            <span>Text size</span>
+            <span className="view-group">
+              {TEXT_SIZES.map((t) => (
+                <button
+                  key={t.id}
+                  title={`Text at ${t.label}`}
+                  aria-pressed={textSize === t.id}
+                  className={textSize === t.id ? "on" : undefined}
+                  onClick={() => setTextSize(t.id)}
                 >
                   {t.label}
                 </button>
@@ -1349,10 +1432,6 @@ function NotebookInner() {
             <span>New entries go to the top</span>
           </label>
           <label>
-            <input type="checkbox" checked={compact} onChange={(e) => setCompact(e.target.checked)} />
-            <span>Compact mode</span>
-          </label>
-          <label>
             <input type="checkbox" checked={wide} onChange={(e) => setWide(e.target.checked)} />
             <span>Wide mode</span>
           </label>
@@ -1364,6 +1443,7 @@ function NotebookInner() {
           <button className="danger" onClick={clearAll}>
             Delete all entries
           </button>
+          <ScreenReadout />
         </Dropdown>
       </header>
 

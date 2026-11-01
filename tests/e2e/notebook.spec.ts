@@ -772,26 +772,27 @@ test("table templates insert a rendering skeleton", async ({ page }) => {
   await expect(page.locator(".md tbody tr")).toHaveCount(3);
 });
 
-test("compact mode is a menu toggle that persists", async ({ page }) => {
+test("compact density is a menu setting that persists", async ({ page }) => {
   await addEntry(page, "an entry");
-  const app = page.locator(".app");
-  await expect(app).not.toHaveAttribute("data-compact", "on");
+  const html = page.locator("html");
+  await expect(html).not.toHaveAttribute("data-density", /.+/);
 
   await page.getByRole("button", { name: "More actions" }).click();
-  await page.getByText("Compact mode").click();
+  await page.getByRole("group", { name: "Density" }).getByRole("button", { name: "Compact" }).click();
   await page.keyboard.press("Escape");
-  await expect(app).toHaveAttribute("data-compact", "on");
+  await expect(html).toHaveAttribute("data-density", "compact");
 
   // Density actually changes, not just the attribute.
   const head = page.locator(".cell-head").first();
   const compactHeight = await head.evaluate((el) => el.getBoundingClientRect().height);
   await page.reload();
   await ready(page);
-  await expect(page.locator(".app")).toHaveAttribute("data-compact", "on");
+  await expect(html).toHaveAttribute("data-density", "compact");
 
   await page.getByRole("button", { name: "More actions" }).click();
-  await page.getByText("Compact mode").click();
+  await page.getByRole("group", { name: "Density" }).getByRole("button", { name: "Normal" }).click();
   await page.keyboard.press("Escape");
+  await expect(html).not.toHaveAttribute("data-density", /.+/);
   const normalHeight = await head.evaluate((el) => el.getBoundingClientRect().height);
   expect(compactHeight).toBeLessThan(normalHeight);
 });
@@ -956,7 +957,7 @@ test.describe("touch device (foldable, phone)", () => {
 
     await page.getByRole("button", { name: "Hide the shortcut hints" }).tap();
     await page.getByRole("button", { name: "More actions" }).tap();
-    await page.getByText("Compact mode").tap();
+    await page.getByRole("group", { name: "Density" }).getByRole("button", { name: "Compact" }).tap();
     await page.keyboard.press("Escape");
 
     const after = await top();
@@ -979,7 +980,7 @@ test("templates live in their own dropdown, separate from the actions menu", asy
   await expect(page.getByRole("button", { name: "Meeting summary" })).toHaveCount(0);
 
   // An action closes the menu; an option leaves it open so several can be set at once.
-  await page.getByText("Compact mode").click();
+  await page.getByRole("group", { name: "Density" }).getByRole("button", { name: "Compact" }).click();
   await expect(page.getByRole("button", { name: "Backup as .json" })).toBeVisible();
   await page.getByText("New entries go to the top").click();
   await expect(page.getByRole("button", { name: "Backup as .json" })).toBeVisible();
@@ -1019,6 +1020,88 @@ test.describe("dropdowns on a short screen", () => {
       await expect(menu).toHaveCount(0);
     }
   });
+});
+
+test("Escape closes a menu and returns focus to its button", async ({ page }) => {
+  const button = page.getByRole("button", { name: "More actions" });
+  await button.click();
+  await expect(page.locator(".menu")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".menu")).toHaveCount(0);
+  await expect(button).toBeFocused();
+});
+
+test("a menu hangs 6px under its button, not offset by the sticky blurred header", async ({ page }) => {
+  // The header's backdrop-filter would make it the containing block of a fixed panel inside it.
+  await expect(page.locator("header.bar")).toHaveCSS("backdrop-filter", /blur/);
+  await page.evaluate(() => window.scrollTo(0, 0));
+  const button = (await page.getByRole("button", { name: "More actions" }).boundingBox())!;
+  await page.getByRole("button", { name: "More actions" }).click();
+  const menu = (await page.locator(".menu").boundingBox())!;
+  expect(Math.abs(menu.y - (button.y + button.height + 6))).toBeLessThanOrEqual(1);
+});
+
+test("display settings leave the menu open; an action closes it", async ({ page }) => {
+  await page.getByRole("button", { name: "More actions" }).click();
+  await page.getByRole("group", { name: "Theme" }).getByRole("button", { name: "Daylight" }).click();
+  await page.getByRole("group", { name: "Density" }).getByRole("button", { name: "Cozy" }).click();
+  await page.getByRole("group", { name: "Text size" }).getByRole("button", { name: "115%" }).click();
+  await expect(page.locator(".menu")).toBeVisible();
+  const html = page.locator("html");
+  await expect(html).toHaveAttribute("data-theme", "daylight");
+  await expect(html).toHaveAttribute("data-density", "cozy");
+  await expect(html).toHaveAttribute("data-text", "115");
+  await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute("content", "#f6f8fa");
+  await page.getByRole("button", { name: "Backup as .json" }).click();
+  await expect(page.locator(".menu")).toHaveCount(0);
+});
+
+test("display settings apply before first paint, and the defaults remove them", async ({ page }) => {
+  await page.evaluate(() => {
+    localStorage.setItem("md-notebook:theme", "oled");
+    localStorage.setItem("md-notebook:density", "cozy");
+    localStorage.setItem("md-notebook:text-size", "130");
+  });
+  // Hold the page's JavaScript back, so what shows is the inline boot script's work.
+  await page.route("**/_next/static/**/*.js", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    await route.continue();
+  });
+  await page.reload({ waitUntil: "domcontentloaded" });
+  const html = page.locator("html");
+  await expect(html).toHaveAttribute("data-theme", "oled");
+  await expect(html).toHaveAttribute("data-density", "cozy");
+  await expect(html).toHaveAttribute("data-text", "130");
+  const scale = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--text-scale").trim());
+  expect(scale).toBe("1.3");
+  await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute("content", "#000000");
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+  await ready(page);
+
+  // 130% scales the type; choosing the defaults removes every attribute.
+  const size = () => page.locator(".hint").evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+  const large = await size();
+  await page.getByRole("button", { name: "More actions" }).click();
+  await page.getByRole("group", { name: "Theme" }).getByRole("button", { name: "Terminal" }).click();
+  await page.getByRole("group", { name: "Density" }).getByRole("button", { name: "Normal" }).click();
+  await page.getByRole("group", { name: "Text size" }).getByRole("button", { name: "100%" }).click();
+  await expect(html).not.toHaveAttribute("data-theme", /.+/);
+  await expect(html).not.toHaveAttribute("data-density", /.+/);
+  await expect(html).not.toHaveAttribute("data-text", /.+/);
+  expect(large / (await size())).toBeCloseTo(1.3, 2);
+});
+
+test("the old Compact mode setting carries over as Compact density", async ({ page }) => {
+  await page.evaluate(() => localStorage.setItem("md-notebook:compact", "1"));
+  await page.reload();
+  await ready(page);
+  await expect(page.locator("html")).toHaveAttribute("data-density", "compact");
+  await page.getByRole("button", { name: "More actions" }).click();
+  await expect(page.getByRole("group", { name: "Density" }).getByRole("button", { name: "Compact" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  expect(await page.evaluate(() => localStorage.getItem("md-notebook:density"))).toBe("compact");
 });
 
 /* ------------------------------------------------------------ image editors */
@@ -1479,14 +1562,14 @@ test("collapse all folds every entry, and expands them again", async ({ page }) 
   await expect(page.locator("section.cell.collapsed")).toHaveCount(0);
 });
 
-test("compact mode keeps timestamps and shortens the Excalidraw label", async ({ page }) => {
+test("compact density keeps timestamps and shortens the Excalidraw label", async ({ page }) => {
   await pasteImage(page);
   const xcd = page.getByRole("button", { name: /open Excalidraw in a new window/ });
   // innerText, because both labels are in the DOM and CSS shows one of them.
   await expect(xcd).toHaveText("Excalidraw ↗", { useInnerText: true });
 
   await page.getByRole("button", { name: "More actions" }).click();
-  await page.getByText("Compact mode").click();
+  await page.getByRole("group", { name: "Density" }).getByRole("button", { name: "Compact" }).click();
   await page.keyboard.press("Escape");
 
   await expect(xcd).toHaveText("Xcd ↗", { useInnerText: true });

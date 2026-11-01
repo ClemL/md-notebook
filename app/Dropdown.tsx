@@ -86,6 +86,8 @@ export default function Dropdown({
       if (e.key === "Escape") {
         e.stopPropagation();
         setOpen(false);
+        // Back to the button, so the keyboard user is where they were.
+        btnRef.current?.querySelector("button")?.focus();
       }
     };
     document.addEventListener("mousedown", onDown);
@@ -110,9 +112,11 @@ export default function Dropdown({
             className="menu"
             role="menu"
             ref={menuRef}
-            // An action closes the menu; a checkbox option leaves it open to set another.
+            // An action closes the menu; a checkbox option, or a button in a row marked
+            // data-keep-open (the display settings), leaves it open to set another.
             onClick={(e) => {
-              if ((e.target as HTMLElement).closest("button")) setOpen(false);
+              const target = e.target as HTMLElement;
+              if (target.closest("button") && !target.closest("[data-keep-open]")) setOpen(false);
             }}
           >
             {children}

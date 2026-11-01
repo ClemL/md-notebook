@@ -123,7 +123,7 @@ test("the command palette filters and runs actions", async ({ page }) => {
   await expect(palette).toBeVisible();
   await page.keyboard.type("compact");
   await page.keyboard.press("Enter");
-  await expect(page.locator(".app")).toHaveAttribute("data-compact", "on");
+  await expect(page.locator("html")).toHaveAttribute("data-density", "compact");
   await page.keyboard.press("Control+Shift+P");
   await page.keyboard.press("Escape");
   await expect(palette).toHaveCount(0);
