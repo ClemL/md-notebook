@@ -68,7 +68,7 @@ the codebase, unused, so the feature can be wired back in.
   on the box tool. **Thumb / Fit W / 1:1** choose how it shows: a small thumbnail (the
   default), the width of the entry, or its original pixels, scrolling
   sideways when wider than the entry. The choice is saved with the image but is not an undo step.
-  In compact mode the Excalidraw button reads **Xcd ↗**. Images are re-encoded as PNG and
+  In Compact density the Excalidraw button reads **Xcd ↗**. Images are re-encoded as PNG and
   downscaled until they fit a per-image budget, because the whole notebook shares a few megabytes of
   `localStorage`. A markdown export writes a dated caption rather than a megabyte of base64 — use
   the `.json` backup to preserve the pixels.
@@ -173,7 +173,7 @@ the codebase, unused, so the feature can be wired back in.
   just a blank line.
 - **New entries go to the top** (⋯ menu) puts new, pasted, templated and imported entries above the
   existing ones instead of below. `a` and `b` still insert relative to the selected entry.
-- **Theme** (⋯ menu, or `theme` in the command palette): three looks, remembered per browser.
+- **Theme** (⋯ menu, or `theme` in the command palette): six looks, remembered per browser.
   - **Terminal**, the original: dark, monospace throughout, every toolbar visible.
   - **Paper**: light and built for reading. Serif prose on warm paper, sans-serif controls, cards
     with shadows instead of outlines, tables ruled horizontally only. Entry toolbars stay hidden
@@ -182,13 +182,26 @@ the codebase, unused, so the feature can be wired back in.
     dark so the syntax colours still read.
   - **Fluent**: styled after Microsoft Teams' dark theme. Segoe UI, a full-width app bar, rounded
     cards with depth, Teams indigo for the accent, striped tables.
+  - **Daylight**: light and plain, the system sans-serif on white cards, blue for actions.
+  - **OLED**: Terminal on true black, for AMOLED screens such as the OnePlus Open and the Galaxy
+    Tab S Ultra, which turn black pixels off. Text is dimmed a step so white does not glare.
+  - **High contrast**: black on white, every border black, links underlined and a thick focus
+    ring, for text and controls at WCAG's 7:1 enhanced contrast. Disabled buttons are dashed
+    rather than faded.
 
-  The theme is applied before the page first paints, so a light theme does not flash dark on
-  load. Printing ignores it and uses the black-on-white print layout. Every colour in
+  Code blocks stay dark in every theme, since the syntax colours are github-dark's. The theme,
+  density and text size are applied before the page first paints, so nothing flashes or jumps on
+  load, and the browser's address-bar colour follows the theme. Printing ignores it and uses the black-on-white print layout. Every colour in
   `app/globals.css` is a variable, so a new theme in `app/themes.css` is a block of variables
   plus whatever type and shape changes it wants.
-- **Compact mode** (⋯ menu) tightens spacing and type for small screens and long notebooks.
-  Timestamps stay visible.
+- **Density** (⋯ menu, or `density` in the command palette): **Compact** tightens spacing and type
+  for small screens and long notebooks, with timestamps still visible; **Normal** is the default;
+  **Cozy** adds room and makes controls at least 36px tall, 44px on a touch screen. A notebook
+  saved with the old Compact mode opens in Compact.
+- **Text size** (⋯ menu, or `text size` in the palette): 90%, 100%, 115% or 130%. It changes the
+  type alone, so larger text does not also mean fewer entries on screen.
+- **Display settings stay open**: choosing a theme, density, text size or image size leaves the ⋯
+  menu open, so several can be set in one visit; an action closes it.
 - **Wide mode** (⋯ menu) lifts the 980px reading width so entries span the browser window.
 - **Entry size** sits beside each timestamp: the line count for a text entry, rows × columns for a
   table entry (hover for the spelled-out form), and pixel dimensions and file size for an image.
@@ -316,13 +329,22 @@ push and pull request, and uploads the Playwright report when something fails.
 
 The layout is fluid from a 412px cover screen up, and touch devices get their own rules: hover
 tooltips are suppressed (they stick after a tap), the code-block copy button is always visible
-rather than hover-revealed, and controls are at least 38px tall. On a OnePlus Open's cover screen,
-hiding the hint line and enabling compact mode takes the chrome above the first entry from 31% of
+rather than hover-revealed, and controls are at least 38px tall (32px in Compact, 44px in Cozy).
+On a OnePlus Open's cover screen, hiding the hint line and choosing Compact density takes the chrome above the first entry from 31% of
 the screen down to 17%; on the inner screen, from 16% to 5%.
 
 Dropdowns are measured against the visible viewport and clamped to it, so a menu taller than the
 screen scrolls inside itself rather than running past the bottom edge — an overlay cannot be
-brought into view by scrolling the page behind it.
+brought into view by scrolling the page behind it. A menu stays open and on screen through a
+fold or a rotation, and Escape returns focus to its button.
+
+The browser tests (`tests/e2e/devices.spec.ts`) run at four screens: the OnePlus Open folded
+(425×946) and unfolded (864×930), and the Galaxy Tab S Ultra in portrait (924×1480) and landscape
+(1480×924). These are estimates from the panels' resolutions; the foot of the ⋯ menu shows
+**This screen**, the real size in CSS pixels, the pixel ratio and the layout in use, so they can be
+checked on the devices. Entries stay one reading column at every size, capped at 980px so lines do
+not run long; **Wide mode** uses the full width of a landscape tablet. Unfolding the phone keeps
+the search filter, folded entries and an open menu as they were.
 
 ## Hosting it yourself
 

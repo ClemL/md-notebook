@@ -59,7 +59,7 @@
   }
 
   [data-theme="paper"] button {
-    font-size: 12.5px;
+    font-size: calc(12.5px * var(--text-scale));
     border-radius: 6px;
   }
 
@@ -75,7 +75,7 @@
   [data-theme="paper"] .title {
     font-family: var(--serif);
     font-style: italic;
-    font-size: 21px;
+    font-size: calc(21px * var(--text-scale));
     font-weight: 700;
     color: var(--accent);
     letter-spacing: 0;
@@ -83,7 +83,7 @@
 
   [data-theme="paper"] button.omnibox-trigger,
   [data-theme="paper"] button.omnibox-trigger:hover:not(:disabled) {
-    font-size: 13px;
+    font-size: calc(13px * var(--text-scale));
     background: var(--panel);
     border-radius: 999px;
     padding: 6px 14px;
@@ -129,7 +129,7 @@
   [data-theme="paper"] .stamp,
   [data-theme="paper"] .cell-meta {
     font-family: var(--sans);
-    font-size: 11.5px;
+    font-size: calc(11.5px * var(--text-scale));
   }
 
   [data-theme="paper"] .cell-body {
@@ -138,7 +138,7 @@
 
   [data-theme="paper"] .md {
     font-family: var(--serif);
-    font-size: 16px;
+    font-size: calc(16px * var(--text-scale));
     line-height: 1.65;
   }
 
@@ -174,7 +174,7 @@
 
   [data-theme="paper"] .md table {
     font-family: var(--sans);
-    font-size: 14px;
+    font-size: calc(14px * var(--text-scale));
   }
 
   [data-theme="paper"] .md th,
@@ -256,7 +256,7 @@
   }
 
   [data-theme="fluent"] button {
-    font-size: 13px;
+    font-size: calc(13px * var(--text-scale));
     background: #333333;
     border-color: transparent;
     border-radius: 6px;
@@ -294,7 +294,7 @@
     align-items: center;
     gap: 9px;
     font-weight: 600;
-    font-size: 15px;
+    font-size: calc(15px * var(--text-scale));
     letter-spacing: 0;
   }
 
@@ -307,13 +307,13 @@
     border-radius: 6px;
     background: linear-gradient(135deg, #7f85f5, #5b5fc7);
     color: #ffffff;
-    font-size: 11px;
+    font-size: calc(11px * var(--text-scale));
     font-weight: 700;
   }
 
   [data-theme="fluent"] button.omnibox-trigger,
   [data-theme="fluent"] button.omnibox-trigger:hover:not(:disabled) {
-    font-size: 13px;
+    font-size: calc(13px * var(--text-scale));
     background: #2b2b2b;
     border: 1px solid #2b2b2b;
     border-bottom: 2px solid #5c5c5c;
@@ -357,7 +357,7 @@
 
   [data-theme="fluent"] .cell-index {
     font-family: var(--sans);
-    font-size: 11px;
+    font-size: calc(11px * var(--text-scale));
     font-weight: 600;
     color: #ffffff;
     background: #3d3e78;
@@ -370,7 +370,7 @@
   [data-theme="fluent"] .stamp,
   [data-theme="fluent"] .cell-meta {
     font-family: var(--sans);
-    font-size: 12px;
+    font-size: calc(12px * var(--text-scale));
   }
 
   [data-theme="fluent"] .cell-body {
@@ -443,5 +443,207 @@
     [data-theme="fluent"] .cell-body {
       padding-inline: 12px;
     }
+  }
+
+  /* --------------------------------------------------------------- Daylight */
+  /* Light and plain: the system sans-serif on white cards over a pale grey page, blue for
+     actions. Code blocks stay dark, since the syntax colours are github-dark's. */
+
+  :root[data-theme="daylight"] {
+    color-scheme: light;
+    --bg: #f6f8fa;
+    --panel: #ffffff;
+    --panel-2: #f6f8fa;
+    --border: #d0d7de;
+    --border-strong: #afb8c1;
+    --fg: #1f2328;
+    --fg-dim: #59636e;
+    --accent: #0969da;
+    --danger: #cf222e;
+    --danger-border: #ff8182;
+    --hover: #eef1f4;
+    --hover-border: #8c959f;
+    --primary-bg: #0969da;
+    --primary-border: #0860ca;
+    --primary-fg: #ffffff;
+    --primary-hover: #0860ca;
+    --bar-bg: rgba(246, 248, 250, 0.94);
+    --overlay: rgba(246, 248, 250, 0.86);
+    --focus-ring: rgba(9, 105, 218, 0.22);
+    --selected-border: #0969da;
+    --well: #ffffff;
+    --code-bg: #24292f;
+    --code-inline-bg: #eff1f3;
+    --kbd-bg: #f6f8fa;
+    --tip-bg: #24292f;
+    --input-focus: #0969da;
+    --flash-bg: #dafbe1;
+    --flash-border: #4ac26b;
+    --flash-fg: #116329;
+    --flash-hover-bg: #aceebb;
+    --flash-hover-border: #2da44e;
+    --collapsed-border: #afb8c1;
+    --collapsed-edge: #8c959f;
+    --collapsed-head: #f6f8fa;
+    --sans: -apple-system, "Segoe UI", "Noto Sans", Roboto, Helvetica, Arial, sans-serif;
+  }
+
+  [data-theme="daylight"] body,
+  [data-theme="daylight"] button,
+  [data-theme="daylight"] kbd {
+    font-family: var(--sans);
+  }
+
+  [data-theme="daylight"] .md code,
+  [data-theme="daylight"] .md pre,
+  [data-theme="daylight"] textarea.editor,
+  [data-theme="daylight"] .raw {
+    font-family: var(--mono);
+  }
+
+  [data-theme="daylight"] button {
+    border-radius: 6px;
+  }
+
+  [data-theme="daylight"] .cell {
+    border-radius: 8px;
+    box-shadow: 0 1px 0 rgba(31, 35, 40, 0.04);
+  }
+
+  [data-theme="daylight"] .tip {
+    color: #ffffff;
+  }
+
+  [data-theme="daylight"] .md pre code {
+    color: #e6edf3;
+    background: none;
+  }
+
+  /* ------------------------------------------------------------------- OLED */
+  /* Terminal on true black: an AMOLED screen (the OnePlus Open, the Galaxy Tab S Ultra) turns
+     black pixels off. Text is dimmed a step so white does not glare in the dark. */
+
+  :root[data-theme="oled"] {
+    color-scheme: dark;
+    --bg: #000000;
+    --panel: #000000;
+    --panel-2: #0a0a0a;
+    --border: #222222;
+    --border-strong: #363636;
+    --fg: #c9c9c9;
+    --fg-dim: #8a8a8a;
+    --accent: #6cb6ff;
+    --danger: #ff7b72;
+    --danger-border: #5a2a27;
+    --hover: #151515;
+    --hover-border: #4a4a4a;
+    --primary-bg: #0d2a45;
+    --primary-border: #1f4f7a;
+    --primary-fg: #cfe8ff;
+    --primary-hover: #12375a;
+    --bar-bg: rgba(0, 0, 0, 0.96);
+    --overlay: rgba(0, 0, 0, 0.86);
+    --focus-ring: rgba(108, 182, 255, 0.18);
+    --selected-border: #2f5e82;
+    --well: #000000;
+    --code-bg: #0a0a0a;
+    --code-inline-bg: #151515;
+    --kbd-bg: #0a0a0a;
+    --tip-bg: #0a0a0a;
+    --input-focus: #2f5e82;
+    --flash-bg: #0b2414;
+    --flash-border: #23663a;
+    --flash-fg: #7fd49a;
+    --flash-hover-bg: #10301b;
+    --flash-hover-border: #2f8a4e;
+    --collapsed-border: #363636;
+    --collapsed-edge: #6a6a6a;
+    --collapsed-head: #0a0a0a;
+  }
+
+  [data-theme="oled"] .menu {
+    box-shadow: none;
+  }
+
+  /* --------------------------------------------------------- High contrast */
+  /* Black on white, every border black, links underlined, and a thick focus ring: text and
+     controls clear WCAG's 7:1 enhanced contrast. Code blocks are black, for github-dark's
+     syntax colours. */
+
+  :root[data-theme="contrast"] {
+    color-scheme: light;
+    --bg: #ffffff;
+    --panel: #ffffff;
+    --panel-2: #f2f2f2;
+    --border: #000000;
+    --border-strong: #000000;
+    --fg: #000000;
+    --fg-dim: #333333;
+    --accent: #0037a6;
+    --danger: #a00000;
+    --danger-border: #a00000;
+    --hover: #e3e9ff;
+    --hover-border: #000000;
+    --primary-bg: #0037a6;
+    --primary-border: #000000;
+    --primary-fg: #ffffff;
+    --primary-hover: #002a80;
+    --bar-bg: #ffffff;
+    --overlay: rgba(255, 255, 255, 0.92);
+    --focus-ring: rgba(0, 55, 166, 0.45);
+    --selected-border: #0037a6;
+    --well: #ffffff;
+    --code-bg: #000000;
+    --code-inline-bg: #ececec;
+    --kbd-bg: #ffffff;
+    --tip-bg: #000000;
+    --input-focus: #0037a6;
+    --flash-bg: #d6f5dd;
+    --flash-border: #005a1e;
+    --flash-fg: #00401a;
+    --flash-hover-bg: #c2efcd;
+    --flash-hover-border: #00401a;
+    --collapsed-border: #000000;
+    --collapsed-edge: #000000;
+    --collapsed-head: #f2f2f2;
+    --sans: "Segoe UI", Roboto, "Noto Sans", Helvetica, Arial, sans-serif;
+  }
+
+  [data-theme="contrast"] body,
+  [data-theme="contrast"] button,
+  [data-theme="contrast"] kbd {
+    font-family: var(--sans);
+  }
+
+  [data-theme="contrast"] .md code,
+  [data-theme="contrast"] .md pre,
+  [data-theme="contrast"] textarea.editor,
+  [data-theme="contrast"] .raw {
+    font-family: var(--mono);
+  }
+
+  [data-theme="contrast"] :focus-visible {
+    outline: 3px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  [data-theme="contrast"] a {
+    text-decoration: underline;
+  }
+
+  [data-theme="contrast"] .md pre code {
+    color: #ffffff;
+    background: none;
+  }
+
+  /* Inactive controls stay legible: a faded button would fall below 7:1. */
+  [data-theme="contrast"] button:disabled {
+    opacity: 1;
+    color: #595959;
+    border-style: dashed;
+  }
+
+  [data-theme="contrast"] .tip {
+    color: #ffffff;
   }
 }

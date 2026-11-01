@@ -37,6 +37,21 @@
   --collapsed-head: #191f27;
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Cascadia Mono",
     "Liberation Mono", monospace;
+  /* Text size (⋯ → Text size): every font size in px is written calc(<n>px * var(--text-scale)),
+     so a new rule with a bare px size ignores the setting. Sizes in em follow their parent. */
+  --text-scale: 1;
+}
+
+:root[data-text="90"] {
+  --text-scale: 0.9;
+}
+
+:root[data-text="115"] {
+  --text-scale: 1.15;
+}
+
+:root[data-text="130"] {
+  --text-scale: 1.3;
 }
 
 * {
@@ -50,14 +65,14 @@ body {
   background: var(--bg);
   color: var(--fg);
   font-family: var(--mono);
-  font-size: 14px;
+  font-size: calc(14px * var(--text-scale));
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
 }
 
 button {
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: calc(12px * var(--text-scale));
   color: var(--fg);
   background: var(--panel-2);
   border: 1px solid var(--border-strong);
@@ -146,13 +161,13 @@ header.bar {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: calc(12px * var(--text-scale));
   color: var(--fg-dim);
 }
 
 .hint {
   color: var(--fg-dim);
-  font-size: 12px;
+  font-size: calc(12px * var(--text-scale));
   margin: 0 0 14px;
 }
 
@@ -165,7 +180,7 @@ header.bar {
   border: 1px solid var(--border-strong);
   border-radius: 4px;
   padding: 8px 14px;
-  font-size: 12px;
+  font-size: calc(12px * var(--text-scale));
   max-width: min(90vw, 560px);
   z-index: 20;
 }
@@ -196,7 +211,7 @@ header.bar {
 
 .cell-index {
   color: var(--fg-dim);
-  font-size: 11px;
+  font-size: calc(11px * var(--text-scale));
   min-width: 42px;
 }
 
@@ -215,7 +230,7 @@ textarea.editor {
   outline: none;
   padding: 12px 0;
   font-family: var(--mono);
-  font-size: 14px;
+  font-size: calc(14px * var(--text-scale));
   line-height: 1.55;
   tab-size: 2;
 }
@@ -376,7 +391,7 @@ textarea.editor {
   border: 1px solid var(--border-strong);
   border-radius: 4px;
   padding: 4px 8px;
-  font-size: 11px;
+  font-size: calc(11px * var(--text-scale));
   color: var(--fg);
   pointer-events: none;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
@@ -407,7 +422,7 @@ textarea.editor {
 
 kbd {
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: calc(10px * var(--text-scale));
   color: var(--fg-dim);
   background: var(--kbd-bg);
   border: 1px solid var(--border-strong);
@@ -476,7 +491,7 @@ button.omnibox-trigger:hover:not(:disabled) {
 }
 
 .omnibox-trigger .count {
-  font-size: 11px;
+  font-size: calc(11px * var(--text-scale));
 }
 
 button.omnibox-clear {
@@ -523,7 +538,7 @@ button.omnibox-clear {
   text-align: left;
   padding: 7px 8px;
   border-radius: 4px;
-  font-size: 12px;
+  font-size: calc(12px * var(--text-scale));
   cursor: pointer;
 }
 
@@ -544,7 +559,7 @@ button.omnibox-clear {
 }
 
 .menu code {
-  font-size: 11px;
+  font-size: calc(11px * var(--text-scale));
 }
 
 /* ---------- banners, drop zone ---------- */
@@ -555,7 +570,7 @@ button.omnibox-clear {
   color: #ffb4ae;
   border-radius: 5px;
   padding: 9px 12px;
-  font-size: 12px;
+  font-size: calc(12px * var(--text-scale));
   margin-bottom: 12px;
 }
 
@@ -570,7 +585,7 @@ button.omnibox-clear {
   border-radius: 8px;
   background: var(--overlay);
   color: var(--accent);
-  font-size: 14px;
+  font-size: calc(14px * var(--text-scale));
   pointer-events: none;
 }
 
@@ -582,7 +597,7 @@ button.omnibox-clear {
 }
 
 .stamp {
-  font-size: 11px;
+  font-size: calc(11px * var(--text-scale));
   color: var(--fg-dim);
   margin-right: 4px;
 }
@@ -608,7 +623,7 @@ button.expand {
   bottom: 8px;
   transform: translateX(-50%);
   z-index: 2;
-  font-size: 11px;
+  font-size: calc(11px * var(--text-scale));
 }
 
 button.expand.collapse {
@@ -629,7 +644,7 @@ button.expand.collapse {
   position: absolute;
   top: 6px;
   right: 6px;
-  font-size: 10px;
+  font-size: calc(10px * var(--text-scale));
   padding: 3px 7px;
   opacity: 0;
   transition: opacity 100ms linear;
@@ -692,7 +707,7 @@ pre.raw {
 }
 
 button.toast-action {
-  font-size: 11px;
+  font-size: calc(11px * var(--text-scale));
   padding: 3px 9px;
   color: var(--accent);
   border-color: var(--primary-border);
@@ -709,7 +724,7 @@ button.toast-action {
 .menu-label {
   display: block;
   padding: 6px 8px 2px;
-  font-size: 10px;
+  font-size: calc(10px * var(--text-scale));
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--fg-dim);
@@ -733,7 +748,7 @@ button[data-flash="on"]:hover:not(:disabled) {
 /* Dimensions and size, on the right just before the timestamp. */
 .image-meta,
 .cell-meta {
-  font-size: 11px;
+  font-size: calc(11px * var(--text-scale));
   color: var(--fg-dim);
   margin-right: 4px;
   white-space: nowrap;
@@ -798,7 +813,7 @@ button.thumb img {
 button.hint-close {
   flex: none;
   padding: 2px 7px;
-  font-size: 11px;
+  font-size: calc(11px * var(--text-scale));
   line-height: 1.4;
   color: var(--fg-dim);
 }
@@ -821,7 +836,7 @@ button.collapse-toggle {
 }
 
 .collapsed-chip {
-  font-size: 10px;
+  font-size: calc(10px * var(--text-scale));
   letter-spacing: 0.04em;
   color: var(--fg-dim);
   border: 1px solid var(--border-strong);
@@ -858,69 +873,120 @@ button.collapse-toggle {
 
 /* ---------- compact mode ---------- */
 
-[data-compact="on"] .bar {
+[data-density="compact"] .bar {
   gap: 5px;
   padding-block: 6px;
   margin-bottom: 8px;
 }
 
-[data-compact="on"] button {
-  font-size: 11px;
+[data-density="compact"] button {
+  font-size: calc(11px * var(--text-scale));
   padding: 3px 7px;
 }
 
-[data-compact="on"] .hint {
-  font-size: 11px;
+[data-density="compact"] .hint {
+  font-size: calc(11px * var(--text-scale));
   margin-bottom: 8px;
 }
 
-[data-compact="on"] .cell {
+[data-density="compact"] .cell {
   margin-bottom: 6px;
   border-radius: 4px;
 }
 
-[data-compact="on"] .cell-head {
+[data-density="compact"] .cell-head {
   padding: 3px 6px;
   gap: 4px;
 }
 
-[data-compact="on"] .cell-body {
+[data-density="compact"] .cell-body {
   padding: 0 10px;
-  font-size: 13px;
+  font-size: calc(13px * var(--text-scale));
 }
 
-[data-compact="on"] .md p,
-[data-compact="on"] .md ul,
-[data-compact="on"] .md ol {
+[data-density="compact"] .md p,
+[data-density="compact"] .md ul,
+[data-density="compact"] .md ol {
   margin: 5px 0;
 }
 
-[data-compact="on"] .md > *:first-child {
+[data-density="compact"] .md > *:first-child {
   margin-top: 8px;
 }
 
-[data-compact="on"] .md > *:last-child {
+[data-density="compact"] .md > *:last-child {
   margin-bottom: 8px;
 }
 
-[data-compact="on"] .md h1,
-[data-compact="on"] .md h2,
-[data-compact="on"] .md h3 {
+[data-density="compact"] .md h1,
+[data-density="compact"] .md h2,
+[data-density="compact"] .md h3 {
   margin: 10px 0 5px;
 }
 
-[data-compact="on"] .md pre {
+[data-density="compact"] .md pre {
   padding: 8px;
 }
 
-[data-compact="on"] textarea.editor {
-  font-size: 13px;
+[data-density="compact"] textarea.editor {
+  font-size: calc(13px * var(--text-scale));
   min-height: 84px;
   padding: 8px 0;
 }
 
-[data-compact="on"] .cell-index {
+[data-density="compact"] .cell-index {
   display: none;
+}
+
+/* ---------- cozy density ---------- */
+/* The roomy end of ⋯ → Density, and the setting for fingers: controls are at least 36px tall,
+   44px on a touch screen (see the touch section). Compact is the block above. */
+
+[data-density="cozy"] body {
+  line-height: 1.7;
+}
+
+[data-density="cozy"] .bar {
+  gap: 10px;
+  padding-block: 14px;
+  margin-bottom: 18px;
+}
+
+[data-density="cozy"] :is(header.bar, .cell-head, .menu, .tools-panel) button {
+  min-height: 36px;
+  padding: 8px 14px;
+}
+
+[data-density="cozy"] .menu label {
+  min-height: 36px;
+  padding: 8px 10px;
+}
+
+[data-density="cozy"] .hint {
+  margin-bottom: 18px;
+}
+
+[data-density="cozy"] .cell {
+  margin-bottom: 20px;
+}
+
+[data-density="cozy"] .cell-head {
+  padding: 10px 12px;
+  gap: 9px;
+}
+
+[data-density="cozy"] .cell-body {
+  padding: 4px 20px;
+}
+
+[data-density="cozy"] .md p,
+[data-density="cozy"] .md ul,
+[data-density="cozy"] .md ol {
+  margin: 12px 0;
+}
+
+[data-density="cozy"] textarea.editor {
+  padding: 14px 0;
 }
 
 /* Long button labels with a compact form, e.g. "Excalidraw ↗" / "Xcd ↗". */
@@ -928,15 +994,15 @@ button.collapse-toggle {
   display: none;
 }
 
-[data-compact="on"] .label-full {
+[data-density="compact"] .label-full {
   display: none;
 }
 
-[data-compact="on"] .label-short {
+[data-density="compact"] .label-short {
   display: inline;
 }
 
-[data-compact="on"] button.thumb img {
+[data-density="compact"] button.thumb img {
   max-height: 160px;
 }
 
@@ -957,7 +1023,7 @@ button.collapse-toggle {
     padding: 7px 12px;
   }
 
-  [data-compact="on"] button {
+  [data-density="compact"] button {
     min-height: 32px;
     padding: 4px 9px;
   }
@@ -989,6 +1055,14 @@ button.collapse-toggle {
   .lightbox-close {
     min-height: 44px;
     min-width: 44px;
+  }
+}
+
+/* Cozy on a touch screen: 44px is the smallest comfortable target for a finger. */
+@media (pointer: coarse) {
+  [data-density="cozy"] :is(header.bar, .cell-head, .menu, .tools-panel) button,
+  [data-density="cozy"] .menu label {
+    min-height: 44px;
   }
 }
 
@@ -1119,7 +1193,7 @@ button.thumb,
 
 .editor-error {
   color: var(--danger);
-  font-size: 12px;
+  font-size: calc(12px * var(--text-scale));
 }
 
 .editor-stage {
@@ -1149,7 +1223,7 @@ button.thumb,
 
 .editor-loading {
   color: var(--fg-dim);
-  font-size: 13px;
+  font-size: calc(13px * var(--text-scale));
 }
 
 /* Excalidraw brings its own chrome and wants the whole area. */
@@ -1204,7 +1278,7 @@ button.swatch.on {
   border-radius: 3px;
   padding: 3px 6px;
   font-family: var(--mono);
-  font-size: 14px;
+  font-size: calc(14px * var(--text-scale));
   font-weight: 600;
   outline: none;
 }
@@ -1236,7 +1310,7 @@ button.swatch.on {
 }
 
 .editor-inline .editor-bar button {
-  font-size: 11px;
+  font-size: calc(11px * var(--text-scale));
   padding: 4px 8px;
 }
 
@@ -1250,7 +1324,7 @@ button.swatch.on {
 }
 
 .editor-inline .editor-title {
-  font-size: 12px;
+  font-size: calc(12px * var(--text-scale));
 }
 
 /* ---------- image view modes ---------- */
@@ -1289,7 +1363,7 @@ button.swatch.on {
   max-width: none;
 }
 
-[data-compact="on"] .thumb-frame:not(.view-thumb) button.thumb img {
+[data-density="compact"] .thumb-frame:not(.view-thumb) button.thumb img {
   max-height: none;
 }
 
@@ -1302,7 +1376,7 @@ button.swatch.on {
 }
 
 .md button.th-btn {
-  font-size: 10px;
+  font-size: calc(10px * var(--text-scale));
   line-height: 1;
   min-height: 0;
   padding: 2px 4px;
@@ -1329,8 +1403,26 @@ button.swatch.on {
   justify-content: space-between;
   gap: 10px;
   padding: 4px 8px;
-  font-size: 12px;
+  font-size: calc(12px * var(--text-scale));
   color: var(--fg-dim);
+}
+
+/* A row with more choices than fit beside its name: the name above, the choices wrapping. */
+.menu-row.stacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.menu-row.stacked .view-group {
+  flex-wrap: wrap;
+}
+
+.screen-readout {
+  margin: 4px 8px 2px;
+  font-size: calc(10.5px * var(--text-scale));
+  color: var(--fg-dim);
+  overflow-wrap: anywhere;
 }
 
 .menu .menu-row .view-group button {
@@ -1365,7 +1457,7 @@ button.swatch.on {
 
 .mermaid-error {
   margin: 10px 0 -4px;
-  font-size: 11px;
+  font-size: calc(11px * var(--text-scale));
   color: var(--danger);
 }
 
@@ -1384,7 +1476,7 @@ button.swatch.on {
   border-left: 1px solid var(--border-strong);
   box-shadow: -8px 0 22px rgba(0, 0, 0, 0.45);
   padding: 10px 14px 24px;
-  font-size: 12px;
+  font-size: calc(12px * var(--text-scale));
 }
 
 .tools-head {
@@ -1401,7 +1493,7 @@ button.swatch.on {
 }
 
 .tools-panel h3 {
-  font-size: 12px;
+  font-size: calc(12px * var(--text-scale));
   margin: 10px 0 6px;
 }
 
@@ -1430,7 +1522,7 @@ button.swatch.on {
   flex: 1 1 auto;
   min-width: 0;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: calc(12px * var(--text-scale));
   color: var(--fg);
   background: var(--bg);
   border: 1px solid var(--border-strong);
@@ -1482,12 +1574,12 @@ button.swatch.on {
 .modal-head h2 {
   flex: 1 1 auto;
   margin: 0;
-  font-size: 14px;
+  font-size: calc(14px * var(--text-scale));
 }
 
 .palette input {
   font-family: var(--mono);
-  font-size: 14px;
+  font-size: calc(14px * var(--text-scale));
   color: var(--fg);
   background: var(--bg);
   border: 0;
@@ -1510,7 +1602,7 @@ button.swatch.on {
   gap: 10px;
   padding: 7px 8px;
   border-radius: 4px;
-  font-size: 12px;
+  font-size: calc(12px * var(--text-scale));
   cursor: pointer;
 }
 
@@ -1526,7 +1618,7 @@ button.swatch.on {
 .palette-group {
   flex: 0 0 72px;
   color: var(--fg-dim);
-  font-size: 11px;
+  font-size: calc(11px * var(--text-scale));
 }
 
 .palette-label {
@@ -1560,7 +1652,7 @@ button.swatch.on {
   margin-top: auto;
   padding: 18px 0 2px;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--text-scale));
   line-height: 1.5;
   color: var(--fg-dim);
 }
@@ -1597,7 +1689,7 @@ button.swatch.on {
   overscroll-behavior: contain;
   margin: 0;
   padding: 10px 14px 12px 32px;
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--text-scale));
   line-height: 1.55;
 }
 
@@ -1612,6 +1704,7 @@ button.swatch.on {
    header and toolbars gone, code readable on paper. Applies to Ctrl+P as well as Print / PDF. */
 @media print {
   :root {
+    --text-scale: 1;
     --bg: #ffffff;
     --panel: #ffffff;
     --panel-2: #f2f2f2;
