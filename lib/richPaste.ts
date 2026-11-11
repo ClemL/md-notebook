@@ -3,6 +3,8 @@
  * initial bundle; the notebook works without it if the import fails.
  */
 
+import { maybeTable } from "./table";
+
 let converterPromise: Promise<((html: string) => string) | null> | null = null;
 
 async function getConverter(): Promise<((html: string) => string) | null> {
@@ -402,6 +404,35 @@ export async function htmlToMarkdown(html: string): Promise<string | null> {
 
 export type ClipboardPayload = { text: string; rich: boolean };
 
+/**
+ * The markdown a paste's two flavors become: a bare Azure DevOps link gets its readable label,
+ * HTML worth converting becomes markdown when rich paste is on, and otherwise the plain text is
+ * kept. Shared by + Paste, which reads the flavors through the async Clipboard API, and by Ctrl+V
+ * outside a text box, which gets them from the paste event.
+ */
+export async function convertFlavors(html: string, plain: string, rich: boolean): Promise<ClipboardPayload> {
+  const ado = azureDevOpsLinkFromClipboard(html, plain);
+  if (ado) return { text: ado, rich: false };
+  if (rich && htmlIsWorthConverting(html, plain)) {
+    const md = await htmlToMarkdown(html);
+    if (md) return { text: md, rich: true };
+  }
+  return { text: plain, rich: false };
+}
+
+/**
+ * Plain text that arrived without a rich flavor to convert gets the rewrites an open entry gives
+ * it: a work-item list leads with its states, and tabular text becomes a markdown table. `rich`
+ * comes back true when either applied, since the entry no longer holds what was copied.
+ */
+export function tidyPlainPaste(payload: ClipboardPayload): ClipboardPayload {
+  if (payload.rich) return payload;
+  const items = statusFirstWorkItems(payload.text);
+  if (items !== payload.text) return { text: items, rich: true };
+  const table = maybeTable(payload.text);
+  return table ? { text: table, rich: true } : payload;
+}
+
 /** Reads the clipboard, preferring a converted text/html flavor when rich paste is enabled. */
 export async function readClipboardSmart(rich: boolean): Promise<ClipboardPayload> {
   const nav = typeof navigator !== "undefined" ? navigator : undefined;
@@ -418,13 +449,8 @@ export async function readClipboardSmart(rich: boolean): Promise<ClipboardPayloa
           : "";
         // A bare Azure DevOps link gets its readable label here too, as it does when pasted into
         // an open entry, rather than being converted under the page title the browser attached.
-        const ado = azureDevOpsLinkFromClipboard(html, plain);
-        if (ado) return { text: ado, rich: false };
-        if (htmlIsWorthConverting(html, plain)) {
-          const md = await htmlToMarkdown(html);
-          if (md) return { text: md, rich: true };
-        }
-        if (plain) return { text: plain, rich: false };
+        const payload = await convertFlavors(html, plain, true);
+        if (payload.text) return payload;
       }
     } catch {
       // Permission denied or an unsupported flavor: fall through to plain text.
