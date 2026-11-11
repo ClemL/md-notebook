@@ -27,3 +27,4 @@
 2026-10-18T13:49:00Z - The command palette is now the header's main control and searches entries; Tools moved into the ⋯ menu and Templates is an icon
 2026-10-30T23:03:00Z - Added this changelog
 2026-11-01T02:10:00Z - Added Daylight, OLED and High contrast themes, a Density setting (Compact, Normal, Cozy) and a Text size setting; display settings leave the ⋯ menu open, and its foot shows this screen's size
+2026-11-11T14:42:00Z - Ctrl+V outside a text box pastes the clipboard as a new entry, and Ctrl+C copies the selected entry, or the top one when none is selected

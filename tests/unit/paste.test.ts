@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   azureDevOpsUrlLabel,
+  convertFlavors,
   htmlToMarkdown,
   statusFirstWorkItems,
   flattenInlineRun,
@@ -8,6 +9,7 @@ import {
   rewriteAzureDevOpsPath,
   rewriteAzureDevOpsUrl,
   tidyMarkdown,
+  tidyPlainPaste,
   tightenLinks,
   visibleLine,
 } from "@/lib/richPaste";
@@ -317,5 +319,47 @@ describe("Azure DevOps work-item list", () => {
         `\`active\` [1887 BIDMC IRB Request, Expose report.rxsenseclaim to them](${u(1887)})`,
       ].join("\n\n"),
     );
+  });
+});
+
+// The pipeline + Paste and Ctrl+V outside a text box share, so the two cannot drift apart.
+describe("paste as a new entry", () => {
+  const WI = "https://dev.azure.com/inscriptrx/Org/_workitems/edit/1898";
+
+  it("keeps plain text as it came", async () => {
+    expect(await convertFlavors("", "just a note", true)).toEqual({ text: "just a note", rich: false });
+  });
+
+  it("labels a bare Azure DevOps URL, with rich paste on or off", async () => {
+    for (const rich of [true, false]) {
+      expect(await convertFlavors("", WI, rich)).toEqual({ text: `[Story 1898](${WI})`, rich: false });
+    }
+  });
+
+  it("converts HTML only when rich paste is on", async () => {
+    const html = "<h2>Plan</h2><ul><li>one</li><li>two</li></ul>";
+    expect(await convertFlavors(html, "Plan\none\ntwo", true)).toEqual({ text: "## Plan\n\n-   one\n-   two", rich: true });
+    expect(await convertFlavors(html, "Plan\none\ntwo", false)).toEqual({ text: "Plan\none\ntwo", rich: false });
+  });
+
+  it("turns tab-separated text into a table", () => {
+    expect(tidyPlainPaste({ text: "Id\tName\n1\tAda\n2\tGrace", rich: false })).toEqual({
+      text: "| Id | Name |\n| --- | --- |\n| 1 | Ada |\n| 2 | Grace |",
+      rich: true,
+    });
+  });
+
+  it("leads a plain work-item list with its states", () => {
+    expect(tidyPlainPaste({ text: `[1898 Onboard](${WI})Resolved`, rich: false })).toEqual({
+      text: `\`resolved\` [1898 Onboard](${WI})`,
+      rich: true,
+    });
+  });
+
+  it("leaves converted markdown and ordinary text alone", () => {
+    const converted = { text: "a\tb\nc\td", rich: true };
+    expect(tidyPlainPaste(converted)).toBe(converted);
+    const prose = { text: "Lunch at noon, then the review.", rich: false };
+    expect(tidyPlainPaste(prose)).toBe(prose);
   });
 });

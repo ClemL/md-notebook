@@ -44,7 +44,6 @@ import {
   type StoredImage,
 } from "@/lib/image";
 import {
-  maybeTable,
   parseCsv,
   parseDelimited,
   parseJsonRows,
@@ -71,7 +70,7 @@ import {
   type DensityId,
   type TextSizeId,
 } from "@/lib/display";
-import { readClipboardSmart, statusFirstWorkItems } from "@/lib/richPaste";
+import { convertFlavors, readClipboardSmart, tidyPlainPaste, type ClipboardPayload } from "@/lib/richPaste";
 import { TEMPLATES } from "@/lib/templates";
 
 const SEP_KEY = "md-notebook:separators";
@@ -92,6 +91,15 @@ type Toast = { message: string; action?: ToastAction };
 const isTypingTarget = (el: EventTarget | null) =>
   el instanceof HTMLElement &&
   (el.tagName === "TEXTAREA" || el.tagName === "INPUT" || el.isContentEditable);
+
+/** Inside the palette, the tools panel, the lightbox or the full-window annotator. */
+const inDialog = (el: EventTarget | null) => el instanceof Element && !!el.closest('[role="dialog"]');
+
+/** Text the reader has highlighted on the page, which Ctrl+C copies as any page would. */
+const hasPageSelection = () => {
+  const selection = window.getSelection();
+  return !!selection && !selection.isCollapsed && selection.toString().trim() !== "";
+};
 
 export default function Notebook() {
   return (
@@ -418,55 +426,84 @@ function NotebookInner() {
     [mutate, place, say, imageView],
   );
 
+  /**
+   * The same string pasted twice is almost always an accident in a scratchpad: when an entry
+   * already holds this text, jump to it and offer to add the paste anyway. False when there is no
+   * twin, so the caller goes ahead.
+   */
+  const jumpToTwin = useCallback(
+    (text: string, addAnyway: () => void) => {
+      const trimmed = text.trim();
+      const twin = trimmed ? cellsRef.current.find((c) => c.text.trim() === trimmed) : undefined;
+      if (!twin) return false;
+      const at = cellsRef.current.indexOf(twin) + 1;
+      jumpTo(twin.id);
+      say(`Already saved as entry ${at} — jumped to it.`, { label: "Add anyway", run: addAnyway });
+      return true;
+    },
+    [jumpTo, say],
+  );
+
   const newFromClipboard = useCallback(async () => {
-    let text = "";
-    let note: string | null = null;
-    let rich = false;
+    let payload: ClipboardPayload = { text: "", rich: false };
+    let blocked = false;
     try {
       const image = await readClipboardImage();
       if (image) {
         await addImage(image);
         return;
       }
-      const payload = await readClipboardSmart(richPaste);
-      text = payload.text;
-      rich = payload.rich;
-      if (!rich) {
-        const items = statusFirstWorkItems(text);
-        if (items !== text) {
-          text = items;
-          rich = true;
-        }
-        const table = rich ? null : maybeTable(text);
-        if (table) {
-          text = table;
-          rich = true;
-        }
-      }
+      payload = tidyPlainPaste(await readClipboardSmart(richPaste));
     } catch {
-      note = "Clipboard read was blocked — press Ctrl+V to paste into the new entry.";
+      blocked = true;
     }
 
-    // The same string pasted twice is almost always an accident in a scratchpad.
-    const trimmed = text.trim();
-    if (trimmed) {
-      const twin = cellsRef.current.find((c) => c.text.trim() === trimmed);
-      if (twin) {
-        const at = cellsRef.current.indexOf(twin) + 1;
-        jumpTo(twin.id);
-        say(`Already saved as entry ${at} — jumped to it.`, {
-          label: "Add anyway",
-          run: () => appendCell(text),
-        });
-        return;
-      }
-    }
-
+    const { text, rich } = payload;
+    if (jumpToTwin(text, () => appendCell(text))) return;
     appendCell(text);
-    if (note) say(note);
-    else if (!trimmed) say("Clipboard was empty — new entry is blank.");
+    if (blocked) say("Clipboard read was blocked — press Ctrl+V to paste into the new entry.");
+    else if (!text.trim()) say("Clipboard was empty — new entry is blank.");
     else if (rich) say("Pasted as markdown (converted from rich content).");
-  }, [addImage, appendCell, jumpTo, richPaste, say]);
+  }, [addImage, appendCell, jumpToTwin, richPaste, say]);
+
+  /**
+   * Ctrl+V with no text box focused. The paste becomes a new entry, rendered and selected rather
+   * than opened for editing, so several pastes in a row each make their own entry; Enter edits it.
+   */
+  const pasteAsEntry = useCallback(
+    ({ text, rich }: ClipboardPayload) => {
+      if (!text.trim()) return say("Nothing to paste — the clipboard holds no text or image.");
+      const add = () => {
+        const cell = makeCell(text);
+        mutate((prev) => place(prev, [cell]));
+        jumpTo(cell.id);
+        const at = cellsRef.current.findIndex((c) => c.id === cell.id) + 1;
+        say(`Pasted as entry ${at}${rich ? ", converted to markdown" : ""}.`, {
+          label: "Undo",
+          run: () => undoRef.current(),
+        });
+      };
+      if (!jumpToTwin(text, add)) add();
+    },
+    [jumpTo, jumpToTwin, mutate, place, say],
+  );
+
+  /** Copies one entry: its markdown, or an image as PNG with its markup painted in. */
+  const copyEntry = useCallback(
+    async (id: string, message?: string) => {
+      const cell = cellsRef.current.find((c) => c.id === id);
+      if (!cell) return;
+      try {
+        if (isImageCell(cell)) await copyImage(cell.image!);
+        else await writeClipboard(cell.text);
+        flash(cell.id, { clipboard: true });
+        say(message ?? (isImageCell(cell) ? "Image copied to the clipboard." : "Entry copied."));
+      } catch (err) {
+        say(err instanceof Error ? err.message : "Copy failed.");
+      }
+    },
+    [flash, say],
+  );
 
   const beginEdit = useCallback((id: string) => {
     const cell = cellsRef.current.find((c) => c.id === id);
@@ -858,16 +895,28 @@ function NotebookInner() {
     [addImage, apply, place, say],
   );
 
+  // An image pasted anywhere becomes an image entry. Text pasted with no text box focused becomes
+  // a text entry, converted by the rules + Paste uses; in a text box the editor's own paste runs.
+  // The paste event carries the clipboard with it, so unlike + Paste this needs no permission.
   useEffect(() => {
     const onPaste = (e: ClipboardEvent) => {
-      const file = imageFromTransfer(e.clipboardData);
-      if (!file) return;
+      const data = e.clipboardData;
+      const file = imageFromTransfer(data);
+      if (file) {
+        e.preventDefault();
+        void addImage(file, file.name || undefined);
+        return;
+      }
+      if (!data || e.defaultPrevented || isTypingTarget(e.target) || inDialog(e.target)) return;
       e.preventDefault();
-      void addImage(file, file.name || undefined);
+      // Read now: the event's clipboard data is gone once the handler returns.
+      const html = data.getData("text/html");
+      const plain = data.getData("text/plain");
+      void convertFlavors(html, plain, richPaste).then((payload) => pasteAsEntry(tidyPlainPaste(payload)));
     };
     document.addEventListener("paste", onPaste);
     return () => document.removeEventListener("paste", onPaste);
-  }, [addImage]);
+  }, [addImage, pasteAsEntry, richPaste]);
 
   useEffect(() => {
     const onDragOver = (e: DragEvent) => {
@@ -955,6 +1004,18 @@ function NotebookInner() {
         void copyAll();
         return;
       }
+      // Ctrl+C outside a text box copies the selected entry, or the top one when none is
+      // selected. Highlighted text on the page is still copied as usual.
+      if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "c" && !typing && !hasPageSelection()) {
+        e.preventDefault();
+        const selected = visible.find((c) => c.id === selectedId);
+        const target = selected ?? visible[0];
+        if (!target) return say("Nothing to copy.");
+        if (!selected) setSelectedId(target.id);
+        const at = cellsRef.current.indexOf(target) + 1;
+        void copyEntry(target.id, `Copied entry ${at}${selected ? "" : ", the top one, as none was selected"}.`);
+        return;
+      }
       if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown") && selectedId) {
         e.preventDefault();
         move(selectedId, e.key === "ArrowUp" ? -1 : 1);
@@ -1009,12 +1070,7 @@ function NotebookInner() {
         case "c":
           if (selectedId) {
             e.preventDefault();
-            const cell = cellsRef.current.find((c) => c.id === selectedId);
-            if (cell)
-              void writeClipboard(cell.text).then(() => {
-                flash(cell.id, { clipboard: true });
-                say("Entry copied.");
-              });
+            void copyEntry(selectedId);
           }
           break;
         case "t":
@@ -1060,6 +1116,7 @@ function NotebookInner() {
     beginEdit,
     checkbox,
     copyAll,
+    copyEntry,
     copyEntryRich,
     exportAll,
     insertBefore,
@@ -1074,6 +1131,7 @@ function NotebookInner() {
     selectedId,
     toolsOpen,
     undo,
+    visible,
   ]);
 
   /* -------------------------------------------------------------- palette */
@@ -1103,18 +1161,7 @@ function NotebookInner() {
       { id: "new", group: "New", label: "New empty entry", hotkey: "Ctrl+Shift+Enter", run: () => appendCell("") },
       ...TEMPLATES.map((t) => ({ id: `tpl-${t.id}`, group: "Template", icon: t.icon, label: t.label, run: () => insertTemplate(t.id) })),
       { id: "edit", group: "Entry", label: "Edit", hotkey: "Enter", disabled: !text, run: () => id && beginEdit(id) },
-      {
-        id: "copy",
-        group: "Entry",
-        label: "Copy markdown",
-        hotkey: "c",
-        disabled: noEntry,
-        run: () => {
-          if (!selectedCell) return;
-          if (selectedCell.image) void copyImage(selectedCell.image).then(() => say("Image copied to the clipboard."));
-          else void copyText(selectedCell.id, selectedCell.text, "Entry copied.");
-        },
-      },
+      { id: "copy", group: "Entry", label: "Copy markdown", hotkey: "c / Ctrl+C", disabled: noEntry, run: () => id && void copyEntry(id) },
       { id: "rich", group: "Entry", label: "Copy as rich text (Outlook, Teams)", hotkey: "Shift+C", disabled: noEntry, run: () => id && copyEntryRich(id) },
       { id: "tsv", group: "Table", label: "Copy as TSV (Excel)", disabled: !selectedTable, run: () => id && copyTsv(id) },
       tableCopy("csv", "Copy as CSV", toCsv),
@@ -1175,6 +1222,7 @@ function NotebookInner() {
     insertTemplate,
     beginEdit,
     copyText,
+    copyEntry,
     copyEntryRich,
     copyTsv,
     checkbox,
@@ -1537,21 +1585,7 @@ function NotebookInner() {
             onFlash={(action) =>
               action === "append" ? markAppended(cell.id) : flash(`${cell.id}:${action}`)
             }
-            onCopy={async () => {
-              try {
-                if (isImageCell(cell)) {
-                  await copyImage(cell.image!);
-                  flash(cell.id, { clipboard: true });
-                  say("Image copied to the clipboard.");
-                } else {
-                  await writeClipboard(cell.text);
-                  flash(cell.id, { clipboard: true });
-                  say("Entry copied.");
-                }
-              } catch (err) {
-                say(err instanceof Error ? err.message : "Copy failed.");
-              }
-            }}
+            onCopy={() => void copyEntry(cell.id)}
           />
         ))
       )}

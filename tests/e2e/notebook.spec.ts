@@ -491,6 +491,105 @@ test("pasting the same clipboard twice jumps to the existing entry", async ({ pa
   await expect(page.locator("section.cell")).toHaveCount(2);
 });
 
+test("Ctrl+V outside a text box pastes the clipboard as a new, rendered entry", async ({ page }) => {
+  const cells = page.locator("section.cell");
+  await page.evaluate(() => navigator.clipboard.writeText("first paste"));
+  await page.keyboard.press("Control+V");
+  await expect(cells).toHaveCount(1);
+  await expect(page.locator("textarea.editor")).toHaveCount(0);
+  await expect(page.locator("section.cell.selected .md")).toHaveText("first paste");
+  await expect(page.locator(".toast")).toContainText("Pasted as entry 1");
+
+  // The new entry is not left open, so the next paste makes its own entry.
+  await page.evaluate(() => navigator.clipboard.writeText("second paste"));
+  await page.keyboard.press("Control+V");
+  await expect(cells).toHaveCount(2);
+  await expect(page.locator("section.cell.selected")).toContainText("second paste");
+
+  // The same text again jumps to the entry that holds it, as + Paste does.
+  await page.keyboard.press("Control+V");
+  await expect(page.locator(".toast")).toContainText("Already saved as entry 2");
+  await expect(cells).toHaveCount(2);
+
+  // Rich content is converted to markdown.
+  await page.evaluate(async () => {
+    await navigator.clipboard.write([
+      new ClipboardItem({
+        "text/html": new Blob(["<h2>Vendor feeds</h2><ul><li><b>Optum</b> weekly</li></ul>"], { type: "text/html" }),
+        "text/plain": new Blob(["Vendor feeds Optum weekly"], { type: "text/plain" }),
+      }),
+    ]);
+  });
+  await page.keyboard.press("Control+V");
+  await expect(cells).toHaveCount(3);
+  await expect(cells.nth(2).locator(".md h2")).toHaveText("Vendor feeds");
+  await expect(page.locator(".toast")).toContainText("converted to markdown");
+
+  // Undo in the toast takes the pasted entry back out.
+  await page.locator(".toast").getByRole("button", { name: "Undo" }).click();
+  await expect(cells).toHaveCount(2);
+
+  // In an open entry, Ctrl+V pastes into the text box as before.
+  await page.evaluate(() => navigator.clipboard.writeText("into the editor"));
+  await page.getByRole("button", { name: /New empty entry/ }).click();
+  await page.keyboard.press("Control+V");
+  await expect(page.locator("textarea.editor")).toHaveValue("into the editor");
+  await page.locator("textarea.editor").press("Escape");
+  await expect(cells).toHaveCount(3);
+});
+
+test("Ctrl+C outside a text box copies the selected entry, or the top one", async ({ page }) => {
+  await addEntry(page, "# Alpha\nfirst line");
+  await addEntry(page, "beta");
+  const clipboard = () => page.evaluate(() => navigator.clipboard.readText());
+
+  // beta was written last, so it is the selected entry.
+  await page.keyboard.press("Control+C");
+  await expect.poll(clipboard).toBe("beta");
+  await expect(page.locator(".toast")).toContainText("Copied entry 2.");
+
+  // After a reload nothing is selected: the top entry is copied, and selected to show which.
+  await page.reload();
+  await ready(page);
+  await expect(page.locator("section.cell.selected")).toHaveCount(0);
+  await page.keyboard.press("Control+C");
+  await expect.poll(clipboard).toBe("# Alpha\nfirst line");
+  await expect(page.locator(".toast")).toContainText("the top one");
+  await expect(page.locator("section.cell.selected")).toContainText("Alpha");
+
+  // Highlighted text is copied as on any page, not the entry around it.
+  await page.locator("section.cell").first().locator(".md p").selectText();
+  await page.keyboard.press("Control+C");
+  await expect.poll(clipboard).toBe("first line");
+
+  // In an open entry, Ctrl+C copies the text box's selection as before.
+  await page.getByRole("button", { name: /Edit this entry/ }).first().click();
+  const ta = page.locator("textarea.editor");
+  await expect(ta).toBeFocused();
+  await ta.evaluate((el: HTMLTextAreaElement) => el.setSelectionRange(2, 7));
+  await page.keyboard.press("Control+C");
+  await expect.poll(clipboard).toBe("Alpha");
+  await ta.press("Escape");
+
+  // An image entry is copied as a PNG, the same as its Copy button.
+  await page.evaluate(async () => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 30;
+    canvas.height = 20;
+    canvas.getContext("2d")!.fillRect(0, 0, 30, 20);
+    const blob = await new Promise<Blob>((r) => canvas.toBlob((b) => r(b!), "image/png"));
+    const dt = new DataTransfer();
+    dt.items.add(new File([blob], "shot.png", { type: "image/png" }));
+    document.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+  });
+  await expect(page.locator("section.image-cell.selected")).toHaveCount(1);
+  await page.evaluate(() => getSelection()?.removeAllRanges());
+  await page.keyboard.press("Control+C");
+  await expect
+    .poll(() => page.evaluate(async () => (await navigator.clipboard.read()).flatMap((i) => i.types)))
+    .toContain("image/png");
+});
+
 test("deleting offers undo in the toast", async ({ page }) => {
   await addEntry(page, "delete then restore");
   await page.getByRole("button", { name: /Delete this entry/ }).click();

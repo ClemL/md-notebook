@@ -24,6 +24,17 @@ the codebase, unused, so the feature can be wired back in.
   clipboard content (Teams, Confluence, a web page) is converted to markdown; plain text is left
   alone. If the browser blocks clipboard reads, the entry is still created and focused so `Ctrl+V`
   works — and pasting into an open entry converts rich content the same way.
+- **Ctrl+V outside a text box** pastes the clipboard as a new entry, by the same rules as
+  **+ Paste**: rich content converted to markdown, Azure DevOps links labelled, tabular text made a
+  table, a duplicate jumped to. The entry is left rendered and selected rather than open, so several
+  pastes in a row each make their own entry; `Enter` edits it, and the toast offers *Undo*. The text
+  comes with the paste itself, so this works where the browser blocks **+ Paste** from reading the
+  clipboard. In an open entry or the command palette, `Ctrl+V` pastes there as usual, and an image
+  becomes an image entry wherever it is pasted.
+- **Ctrl+C outside a text box** copies the selected entry, as its **Copy** button does — the
+  markdown, or an image as PNG with its markup — or, when none is selected, the top entry on screen
+  (the top of the filtered set while searching), which it then selects. Text highlighted on the
+  page is copied as on any other page, and `Ctrl+C` in a text box copies its selection.
 - **Breadcrumbs paste as one line.** A link trail copied from a web app — Azure DevOps'
   `/ Boards / Sprints`, say — arrives as block elements that Turndown splits across a dozen lines,
   with the link text stranded inside `[` `]`. Those are collapsed back into
@@ -235,13 +246,15 @@ Every button's tooltip names its shortcut. Outside a text box the notebook is in
 | `a` / `b` | Insert an entry above / below |
 | `dd` | Delete the selected entry |
 | `c` | Copy the selected entry |
+| `Ctrl+C` | Copy the selected entry, or the top one when none is selected; highlighted text copies as usual |
 | `t` | Turn the selected entry's lines into tasks |
 | `r` | Toggle raw markdown view |
 | `Shift+M` | Merge the selected entry with the one below |
 | `Ctrl+Shift+-` | Split the entry being edited at the caret |
 | `Alt+↑` / `Alt+↓` | Move the entry up / down |
 | `/` or `Ctrl+K` | Search: the command palette, on the current filter |
-| `Ctrl+Shift+V` | New entry from the clipboard |
+| `Ctrl+V` | Paste the clipboard as a new entry, left rendered |
+| `Ctrl+Shift+V` | New entry from the clipboard, opened for editing |
 | `Ctrl+Shift+Enter` | New empty entry |
 | `Ctrl+Z` / `Ctrl+Shift+Z` | Undo / redo |
 | `Ctrl+S` | Export all as markdown |
